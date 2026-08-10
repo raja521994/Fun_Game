@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm install
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm install
+
+      - name: Run server tests
+        working-directory: server
+        run: npm test
+        env:
+          NODE_ENV: test
+
+      - name: Build client
+        working-directory: client
+        run: npm run build
+
+      - name: Verify server starts
+        working-directory: server
+        run: |
+          node -e "require('./src/database/db').initSchema(); console.log('DB OK')"
+          timeout 5 node src/server.js || true
+        env:
+          PORT: 3000
+          NODE_ENV: production

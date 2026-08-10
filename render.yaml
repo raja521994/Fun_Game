@@ -1,0 +1,30 @@
+# Render Blueprint for Fun Game
+# Deploys as a single Web Service (Express serves API + Socket.IO + static frontend)
+
+services:
+  - type: web
+    name: fun-game
+    runtime: node
+    plan: free
+    buildCommand: npm install && cd client && npm install && npm run build && cd ../server && npm install
+    startCommand: cd server && NODE_ENV=production node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        value: ./data/fungame.db
+      - key: CLIENT_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: QUIZ_BASE_SCORE
+        value: "1000"
+      - key: QUIZ_TIME_BONUS_MAX
+        value: "500"
+    healthCheckPath: /api/health
+    disk:
+      name: fun-game-data
+      mountPath: /opt/render/project/src/server/data
+      sizeGB: 1
