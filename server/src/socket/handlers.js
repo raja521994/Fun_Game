@@ -278,6 +278,27 @@ function registerSocketHandlers(io) {
       }
     });
 
+    // Host presentation phase sync (lobby / next / ready_results / final_scores)
+    socket.on('present_phase', ({ phase, leaderboard: lb }, callback) => {
+      try {
+        if (socket.data.role !== 'host') {
+          return callback?.({ error: 'Unauthorized' });
+        }
+        const roomId = socket.data.roomId;
+        if (!roomId) return callback?.({ error: 'No room' });
+
+        const payload = { phase: phase || 'waiting' };
+        if (phase === 'final_scores' || phase === 'ready_results') {
+          const leaderboard = lb || questionService.getLeaderboard(roomId);
+          payload.leaderboard = leaderboard;
+        }
+        io.to(`room:${roomId}`).emit('present_phase', payload);
+        callback?.({ success: true });
+      } catch (err) {
+        callback?.({ error: err.message || 'Failed' });
+      }
+    });
+
     // End game
     socket.on('end_game', (callback) => {
       try {

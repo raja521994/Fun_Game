@@ -61,6 +61,14 @@ export default function HostPage() {
     questionsRef.current = questions;
   }, [questions]);
 
+  const broadcastPhase = useCallback(async (phase, extra = {}) => {
+    try {
+      await emitWithAck('present_phase', { phase, ...extra });
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+
   const startQuestionByIndex = useCallback(async (index) => {
     const list = questionsRef.current;
     const q = list[index];
@@ -73,13 +81,14 @@ export default function HostPage() {
       setShowFinalResults(false);
       setBetweenQuestions(false);
       setReadyForResults(false);
+      broadcastPhase('live');
       startedAtRef.current = Date.now();
       if (q.timer_seconds > 0) setTimerLeft(q.timer_seconds);
       else setTimerLeft(null);
     } catch (err) {
       alert(err.message);
     }
-  }, []);
+  }, [broadcastPhase]);
 
   const handleTimerComplete = useCallback(async (questionId) => {
     if (advancingRef.current) return;
@@ -105,10 +114,12 @@ export default function HostPage() {
         setBetweenQuestions(true);
         setShowFinalResults(false);
         setCurrentIndex(nextIdx);
+        try { await emitWithAck('present_phase', { phase: 'between' }); } catch { /* */ }
       } else if (presentModeRef.current) {
         setBetweenQuestions(false);
         setReadyForResults(true);
         setShowFinalResults(false);
+        try { await emitWithAck('present_phase', { phase: 'ready_results' }); } catch { /* */ }
         try {
           const res = await emitWithAck('show_results', { questionId });
           if (res.leaderboard) setLeaderboard(res.leaderboard);
@@ -250,10 +261,12 @@ export default function HostPage() {
           setBetweenQuestions(true);
           setShowFinalResults(false);
           setCurrentIndex(nextIdx);
+          try { await emitWithAck('present_phase', { phase: 'between' }); } catch { /* */ }
         } else {
           setBetweenQuestions(false);
           setReadyForResults(true);
           setShowFinalResults(false);
+          try { await emitWithAck('present_phase', { phase: 'ready_results' }); } catch { /* */ }
           if (res.leaderboard) setLeaderboard(res.leaderboard);
           else {
             try {
@@ -366,6 +379,7 @@ export default function HostPage() {
       if (readyForResults) {
         setReadyForResults(false);
         setShowFinalResults(true);
+        emitWithAck('present_phase', { phase: 'final_scores' }).catch(() => {});
         return;
       }
       if (betweenQuestions) {
