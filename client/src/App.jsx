@@ -1,6 +1,7 @@
 import { Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import HostPage from './pages/HostPage';
+import HostDashboard from './pages/HostDashboard';
 import JoinPage from './pages/JoinPage';
 import ParticipantPage from './pages/ParticipantPage';
 import NotFoundPage from './pages/NotFoundPage';
@@ -10,6 +11,8 @@ export default function App() {
     <div className="min-h-dvh flex flex-col">
       <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/rooms" element={<HostDashboard />} />
+        <Route path="/host" element={<HostDashboard />} />
         <Route path="/host/:token" element={<HostPage />} />
         <Route path="/join" element={<JoinPage />} />
         <Route path="/join/:code" element={<JoinPage />} />

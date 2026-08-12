@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Zap, Users, Smartphone, Shield } from 'lucide-react';
 import api from '../services/api';
+import { upsertHostRoom } from '../utils/hostRooms';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -13,6 +14,7 @@ export default function HomePage() {
     setError('');
     try {
       const room = await api.createRoom('Fun Game Session');
+      upsertHostRoom(room);
       // Persist host token for reconnect
       localStorage.setItem(`hostToken:${room.roomCode}`, room.hostToken);
       localStorage.setItem('lastHostToken', room.hostToken);
@@ -56,6 +58,15 @@ export default function HomePage() {
               className="btn bg-white/15 hover:bg-white/25 text-white border border-white/30 text-lg px-8 py-4 min-w-[200px]"
             >
               Join Game
+            </button>
+          </div>
+          <div className="mt-5">
+            <button
+              type="button"
+              onClick={() => navigate('/rooms')}
+              className="text-sm text-indigo-100 hover:text-white underline-offset-2 hover:underline"
+            >
+              My rooms — manage multiple sessions
             </button>
           </div>
           {error && (
