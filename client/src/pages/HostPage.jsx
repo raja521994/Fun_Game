@@ -39,6 +39,7 @@ export default function HostPage() {
   const [copied, setCopied] = useState(false);
   const [answerStatus, setAnswerStatus] = useState([]);
   const [showFinalResults, setShowFinalResults] = useState(false);
+  const [betweenQuestions, setBetweenQuestions] = useState(false);
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
   const [timerLeft, setTimerLeft] = useState(null);
@@ -69,6 +70,7 @@ export default function HostPage() {
       setActiveQuestion({ ...q, status: 'active', is_active: 1 });
       setResults(null);
       setShowFinalResults(false);
+      setBetweenQuestions(false);
       startedAtRef.current = Date.now();
       if (q.timer_seconds > 0) setTimerLeft(q.timer_seconds);
       else setTimerLeft(null);
@@ -91,33 +93,32 @@ export default function HostPage() {
       const list = questionsRef.current;
       const nextIdx = idx + 1;
 
+      setActiveQuestion((q) => (q ? { ...q, status: 'stopped', is_active: 0 } : q));
+      setTimerLeft(null);
+      setResults(null);
+      setAnswerStatus([]);
+
       if (presentModeRef.current && nextIdx < list.length) {
-        // Next question — no results screen
-        setResults(null);
-        setActiveQuestion(null);
-        setTimerLeft(null);
-        setAnswerStatus([]);
-        await startQuestionByIndex(nextIdx);
+        // Interstitial: ready for next?
+        setBetweenQuestions(true);
+        setShowFinalResults(false);
+        setCurrentIndex(nextIdx);
       } else if (presentModeRef.current) {
-        // Last question — show final results
-        setActiveQuestion((q) => (q ? { ...q, status: 'stopped', is_active: 0 } : q));
-        setTimerLeft(null);
+        // Last question — final scores only
+        setBetweenQuestions(false);
         setShowFinalResults(true);
         try {
           const res = await emitWithAck('show_results', { questionId });
-          setResults(res.results);
           if (res.leaderboard) setLeaderboard(res.leaderboard);
+          setResults(null); // no per-question chart at end — scores only
         } catch {
-          /* results may already be on host via socket */
+          /* ok */
         }
-      } else {
-        setActiveQuestion((q) => (q ? { ...q, status: 'stopped', is_active: 0 } : q));
-        setTimerLeft(null);
       }
     } finally {
       advancingRef.current = false;
     }
-  }, [startQuestionByIndex]);
+  }, []);
 
   const refreshFromHost = useCallback(async () => {
     try {
@@ -314,10 +315,47 @@ export default function HostPage() {
     const qrSrc = joinUrl
       ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=12&data=${encodeURIComponent(joinUrl)}`
       : '';
-    const showLobby = !isLive && !showFinalResults && !results;
+    const showLobby = !isLive && !showFinalResults && !betweenQuestions;
 
-    // Compact QR while live or showing final results
-    const qrCompact = isLive || showFinalResults;
+    const JoinCard = ({ compact = false }) => (
+      <div
+        className={`bg-white rounded-3xl text-slate-900 shadow-2xl ${
+          compact ? 'p-3 w-[140px]' : 'p-6 w-full max-w-sm'
+        }`}
+      >
+        <p
+          className={`text-center font-semibold uppercase tracking-wider text-brand-600 ${
+            compact ? 'text-[9px] mb-1' : 'text-xs mb-3'
+          }`}
+        >
+          Scan to join
+        </p>
+        {qrSrc && (
+          <img
+            src={qrSrc}
+            alt={`QR code to join room ${roomCode}`}
+            className={`mx-auto rounded-xl ${compact ? 'w-full' : 'w-full max-w-[240px]'}`}
+            width={compact ? 120 : 240}
+            height={compact ? 120 : 240}
+          />
+        )}
+        {!compact && (
+          <div className="mt-5 text-center space-y-3 border-t border-slate-100 pt-4">
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Or visit</p>
+              <p className="text-sm font-medium text-brand-700 break-all">{origin}</p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Then join with code</p>
+              <p className="font-mono text-3xl font-bold tracking-[0.2em]">{roomCode}</p>
+            </div>
+          </div>
+        )}
+        {compact && (
+          <p className="font-mono text-center text-sm font-bold tracking-widest mt-1">{roomCode}</p>
+        )}
+      </div>
+    );
 
     return (
       <div className="fixed inset-0 bg-slate-900 text-white flex flex-col z-50">
@@ -332,7 +370,7 @@ export default function HostPage() {
             </span>
             {questions.length > 0 && (
               <span className="text-sm text-white/50">
-                Q{currentIndex + 1}/{questions.length}
+                Q{Math.min(currentIndex + 1, questions.length)}/{questions.length}
               </span>
             )}
           </div>
@@ -349,46 +387,52 @@ export default function HostPage() {
         </div>
 
         <div className="flex-1 flex flex-col overflow-auto px-6 py-4">
-          {/* Lobby: big QR + join instructions */}
+          {/* Lobby */}
           {showLobby && (
             <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-10">
-              <div className="text-center max-w-xl">
+              <div className="text-center max-w-xl order-2 lg:order-1">
                 <p className="text-white/50 text-sm uppercase tracking-widest mb-3">Waiting for players</p>
                 <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">Join this game</h1>
                 <p className="text-white/60">
                   Scan the QR code or open the link and enter the room code
                 </p>
               </div>
-              <div className="bg-white rounded-3xl p-6 text-slate-900 shadow-2xl w-full max-w-sm">
-                <p className="text-center text-xs font-semibold uppercase tracking-wider text-brand-600 mb-3">
-                  Scan to join
-                </p>
-                {qrSrc && (
-                  <img
-                    src={qrSrc}
-                    alt={`QR code to join room ${roomCode}`}
-                    className="w-full max-w-[240px] mx-auto rounded-xl"
-                    width={240}
-                    height={240}
-                  />
-                )}
-                <div className="mt-5 text-center space-y-3 border-t border-slate-100 pt-4">
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1">Or visit</p>
-                    <p className="text-sm font-medium text-brand-700 break-all">{origin}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1">Then join with code</p>
-                    <p className="font-mono text-3xl font-bold tracking-[0.2em]">{roomCode}</p>
-                  </div>
-                </div>
+              <div className="order-1 lg:order-2">
+                <JoinCard />
               </div>
             </div>
           )}
 
-          {/* Live question: compact QR on top, chart below */}
+          {/* Between questions interstitial */}
+          {betweenQuestions && !isLive && (
+            <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-10">
+              <div className="order-1">
+                <JoinCard />
+              </div>
+              <div className="text-center max-w-xl order-2">
+                <p className="text-white/50 text-sm uppercase tracking-widest mb-3">
+                  Question {currentIndex + 1} of {questions.length}
+                </p>
+                <h1 className="font-display text-3xl md:text-5xl font-bold mb-4 leading-tight">
+                  Are you ready for the next puzzle?
+                </h1>
+                <p className="text-white/60 mb-8">
+                  Get ready — the next question is about to start
+                </p>
+                <button
+                  type="button"
+                  onClick={() => startQuestionByIndex(currentIndex)}
+                  className="btn-accent text-lg px-10 py-4"
+                >
+                  <Play className="w-5 h-5" /> Start next question
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Live question — white Mentimeter-style board + small QR */}
           {isLive && (
-            <div className="flex-1 flex flex-col gap-4 max-w-5xl mx-auto w-full">
+            <div className="flex-1 flex flex-col gap-4 max-w-6xl mx-auto w-full">
               <div className="flex flex-col sm:flex-row items-start gap-4">
                 <div className="flex-1 min-w-0">
                   <p className="text-white/40 text-xs uppercase tracking-wider mb-2">
@@ -398,30 +442,13 @@ export default function HostPage() {
                     {(activeQuestion || currentQ)?.question_text}
                   </h1>
                 </div>
-                {/* Half-size QR */}
-                <div className="shrink-0 bg-white rounded-2xl p-3 text-slate-900 shadow-xl w-[140px]">
-                  <p className="text-[9px] font-semibold uppercase tracking-wider text-brand-600 text-center mb-1">
-                    Scan to join
-                  </p>
-                  {qrSrc && (
-                    <img
-                      src={qrSrc}
-                      alt="Join QR"
-                      className="w-full rounded-lg"
-                      width={120}
-                      height={120}
-                    />
-                  )}
-                  <p className="font-mono text-center text-sm font-bold tracking-widest mt-1">{roomCode}</p>
-                </div>
+                <JoinCard compact />
               </div>
-
-              <div className="flex-1 bg-white text-slate-900 rounded-3xl p-6 shadow-2xl min-h-[280px]">
-                <p className="text-sm font-medium text-slate-500 mb-3">Live answers</p>
+              <div className="flex-1 bg-white text-slate-900 rounded-3xl p-6 md:p-10 shadow-2xl min-h-[300px]">
                 {results ? (
                   <ResultsChart results={results} presentMode />
                 ) : (
-                  <p className="text-center text-slate-400 py-16 animate-pulse-soft">
+                  <p className="text-center text-slate-400 py-20 animate-pulse-soft text-lg">
                     Collecting answers…
                   </p>
                 )}
@@ -429,33 +456,18 @@ export default function HostPage() {
             </div>
           )}
 
-          {/* Final results after last question */}
-          {showFinalResults && !isLive && (
-            <div className="flex-1 flex flex-col gap-4 max-w-5xl mx-auto w-full">
-              <div className="flex items-start gap-4">
-                <div className="flex-1">
-                  <p className="text-white/40 text-xs uppercase tracking-wider mb-2">Game complete</p>
-                  <h1 className="font-display text-2xl md:text-4xl font-bold">Final results</h1>
-                </div>
-                <div className="shrink-0 bg-white rounded-2xl p-3 text-slate-900 shadow-xl w-[140px]">
-                  <p className="text-[9px] font-semibold uppercase tracking-wider text-brand-600 text-center mb-1">
-                    Scan to join
-                  </p>
-                  {qrSrc && (
-                    <img src={qrSrc} alt="Join QR" className="w-full rounded-lg" width={120} height={120} />
-                  )}
-                  <p className="font-mono text-center text-sm font-bold tracking-widest mt-1">{roomCode}</p>
-                </div>
+          {/* Final: scores only (no mid-quiz leaderboard) */}
+          {showFinalResults && !isLive && !betweenQuestions && (
+            <div className="flex-1 flex flex-col gap-6 max-w-3xl mx-auto w-full items-center justify-center">
+              <div className="text-center">
+                <p className="text-white/40 text-xs uppercase tracking-wider mb-2">Game complete</p>
+                <h1 className="font-display text-3xl md:text-5xl font-bold">Final scores</h1>
               </div>
-              <div className="bg-white text-slate-900 rounded-3xl p-6 shadow-2xl">
-                {results && <ResultsChart results={results} presentMode />}
-                {leaderboard.length > 0 && (
-                  <div className="mt-8 border-t border-slate-100 pt-6">
-                    <Leaderboard entries={leaderboard} presentMode />
-                  </div>
-                )}
-                {!results && leaderboard.length === 0 && (
-                  <p className="text-center text-slate-400 py-12">No results yet</p>
+              <div className="bg-white text-slate-900 rounded-3xl p-8 shadow-2xl w-full">
+                {leaderboard.length > 0 ? (
+                  <Leaderboard entries={leaderboard} presentMode />
+                ) : (
+                  <p className="text-center text-slate-400 py-12">No scores yet</p>
                 )}
               </div>
             </div>
@@ -463,9 +475,19 @@ export default function HostPage() {
         </div>
 
         <div className="flex justify-center gap-3 py-4 bg-black/20">
-          <button onClick={handleStart} className="btn-accent" disabled={!currentQ || isLive}>
-            <Play className="w-4 h-4" /> Start
-          </button>
+          {!betweenQuestions && (
+            <button onClick={handleStart} className="btn-accent" disabled={!currentQ || isLive}>
+              <Play className="w-4 h-4" /> Start
+            </button>
+          )}
+          {betweenQuestions && (
+            <button
+              onClick={() => startQuestionByIndex(currentIndex)}
+              className="btn-accent"
+            >
+              <Play className="w-4 h-4" /> Start next
+            </button>
+          )}
           <button
             onClick={handleStop}
             className="btn bg-white/15 text-white hover:bg-white/25"
@@ -473,20 +495,17 @@ export default function HostPage() {
           >
             <Square className="w-4 h-4" /> Stop
           </button>
-          <button onClick={handleShowResults} className="btn bg-white/15 text-white hover:bg-white/25">
-            <BarChart3 className="w-4 h-4" /> Results
-          </button>
           <button
             onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
             className="btn bg-white/15 text-white hover:bg-white/25"
-            disabled={currentIndex <= 0 || isLive}
+            disabled={currentIndex <= 0 || isLive || betweenQuestions}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
             onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
             className="btn bg-white/15 text-white hover:bg-white/25"
-            disabled={currentIndex >= questions.length - 1 || isLive}
+            disabled={currentIndex >= questions.length - 1 || isLive || betweenQuestions}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
