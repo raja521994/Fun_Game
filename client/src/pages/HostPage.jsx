@@ -232,13 +232,21 @@ export default function HostPage() {
   }
 
   if (presentMode) {
+    const roomCode = room?.roomCode || '';
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const joinUrl = roomCode ? `${origin}/join/${roomCode}` : origin;
+    const qrSrc = joinUrl
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=12&data=${encodeURIComponent(joinUrl)}`
+      : '';
+    const showLobby = !results && activeQuestion?.status !== 'active';
+
     return (
       <div className="fixed inset-0 bg-slate-900 text-white flex flex-col z-50">
         <div className="flex items-center justify-between px-6 py-3 bg-black/30">
           <div className="flex items-center gap-4">
             <span className="font-display font-bold text-lg">Fun Game</span>
             <span className="font-mono tracking-widest bg-white/10 px-3 py-1 rounded-lg text-sm">
-              {room?.roomCode}
+              {roomCode}
             </span>
             <span className="text-sm text-white/60 flex items-center gap-1">
               <Users className="w-4 h-4" /> {onlineCount}
@@ -255,41 +263,104 @@ export default function HostPage() {
             </button>
           </div>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center px-8 py-6 overflow-auto">
-          {(activeQuestion || currentQ) && (
-            <h1 className="font-display text-3xl md:text-5xl font-bold text-center mb-10 max-w-4xl leading-tight">
-              {(activeQuestion || currentQ).question_text}
-            </h1>
-          )}
-          {results ? (
-            <div className="w-full max-w-3xl bg-white text-slate-900 rounded-3xl p-8 shadow-2xl">
-              <ResultsChart results={results} presentMode />
-              {leaderboard.length > 0 && (activeQuestion || currentQ)?.is_quiz === 1 && (
-                <div className="mt-8 border-t border-slate-100 pt-6">
-                  <Leaderboard entries={leaderboard} presentMode />
-                </div>
+
+        <div className="flex-1 flex flex-col lg:flex-row items-stretch justify-center gap-8 px-6 py-6 overflow-auto">
+          <div className="flex-1 flex flex-col items-center justify-center min-w-0">
+            {showLobby ? (
+              <div className="text-center max-w-xl">
+                <p className="text-white/50 text-sm uppercase tracking-widest mb-3">Waiting for players</p>
+                <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">Join this game</h1>
+                <p className="text-white/60 mb-8">
+                  Scan the QR code or open the link and enter the room code
+                </p>
+              </div>
+            ) : (
+              <>
+                {(activeQuestion || currentQ) && (
+                  <h1 className="font-display text-3xl md:text-5xl font-bold text-center mb-10 max-w-4xl leading-tight">
+                    {(activeQuestion || currentQ).question_text}
+                  </h1>
+                )}
+                {results ? (
+                  <div className="w-full max-w-3xl bg-white text-slate-900 rounded-3xl p-8 shadow-2xl">
+                    <ResultsChart results={results} presentMode />
+                    {leaderboard.length > 0 && (activeQuestion || currentQ)?.is_quiz === 1 && (
+                      <div className="mt-8 border-t border-slate-100 pt-6">
+                        <Leaderboard entries={leaderboard} presentMode />
+                      </div>
+                    )}
+                  </div>
+                ) : activeQuestion?.status === 'active' ? (
+                  <p className="text-xl text-white/50 animate-pulse-soft">Collecting answers…</p>
+                ) : null}
+              </>
+            )}
+          </div>
+
+          <div
+            className={`shrink-0 flex flex-col items-center justify-center ${
+              showLobby ? 'w-full max-w-md mx-auto' : 'lg:w-72'
+            }`}
+          >
+            <div className="bg-white rounded-3xl p-6 text-slate-900 shadow-2xl w-full max-w-sm">
+              <p className="text-center text-xs font-semibold uppercase tracking-wider text-brand-600 mb-3">
+                Scan to join
+              </p>
+              {qrSrc ? (
+                <img
+                  src={qrSrc}
+                  alt={`QR code to join room ${roomCode}`}
+                  className="w-full max-w-[240px] mx-auto rounded-xl bg-white"
+                  width={240}
+                  height={240}
+                />
+              ) : (
+                <div className="w-60 h-60 mx-auto bg-slate-100 rounded-xl" />
               )}
+              <div className="mt-5 text-center space-y-3 border-t border-slate-100 pt-4">
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Or visit</p>
+                  <p className="text-sm font-medium text-brand-700 break-all leading-snug">
+                    {origin || 'this website'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Then join with code</p>
+                  <p className="font-mono text-3xl font-bold tracking-[0.2em] text-slate-900">
+                    {roomCode}
+                  </p>
+                </div>
+              </div>
             </div>
-          ) : activeQuestion?.status === 'active' ? (
-            <p className="text-xl text-white/50 animate-pulse-soft">Collecting answers…</p>
-          ) : (
-            <p className="text-white/40">Start a question to begin</p>
-          )}
+          </div>
         </div>
+
         <div className="flex justify-center gap-3 py-4 bg-black/20">
           <button onClick={handleStart} className="btn-accent" disabled={!currentQ}>
             <Play className="w-4 h-4" /> Start
           </button>
-          <button onClick={handleStop} className="btn bg-white/15 text-white hover:bg-white/25" disabled={!activeQuestion || activeQuestion.status !== 'active'}>
+          <button
+            onClick={handleStop}
+            className="btn bg-white/15 text-white hover:bg-white/25"
+            disabled={!activeQuestion || activeQuestion.status !== 'active'}
+          >
             <Square className="w-4 h-4" /> Stop
           </button>
           <button onClick={handleShowResults} className="btn bg-white/15 text-white hover:bg-white/25">
             <BarChart3 className="w-4 h-4" /> Results
           </button>
-          <button onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))} className="btn bg-white/15 text-white hover:bg-white/25" disabled={currentIndex <= 0}>
+          <button
+            onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+            className="btn bg-white/15 text-white hover:bg-white/25"
+            disabled={currentIndex <= 0}
+          >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <button onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))} className="btn bg-white/15 text-white hover:bg-white/25" disabled={currentIndex >= questions.length - 1}>
+          <button
+            onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
+            className="btn bg-white/15 text-white hover:bg-white/25"
+            disabled={currentIndex >= questions.length - 1}
+          >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
