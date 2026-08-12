@@ -38,9 +38,86 @@ export default function HostPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [copied, setCopied] = useState(false);
   const [answerStatus, setAnswerStatus] = useState([]);
+  const [showFinalResults, setShowFinalResults] = useState(false);
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
   const [timerLeft, setTimerLeft] = useState(null);
+  const presentModeRef = useRef(false);
+  const currentIndexRef = useRef(0);
+  const questionsRef = useRef([]);
+  const advancingRef = useRef(false);
+
+  useEffect(() => {
+    presentModeRef.current = presentMode;
+  }, [presentMode]);
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+
+  useEffect(() => {
+    questionsRef.current = questions;
+  }, [questions]);
+
+  const startQuestionByIndex = useCallback(async (index) => {
+    const list = questionsRef.current;
+    const q = list[index];
+    if (!q) return;
+    try {
+      await emitWithAck('start_question', { questionId: q.id });
+      setCurrentIndex(index);
+      setActiveQuestion({ ...q, status: 'active', is_active: 1 });
+      setResults(null);
+      setShowFinalResults(false);
+      startedAtRef.current = Date.now();
+      if (q.timer_seconds > 0) setTimerLeft(q.timer_seconds);
+      else setTimerLeft(null);
+    } catch (err) {
+      alert(err.message);
+    }
+  }, []);
+
+  const handleTimerComplete = useCallback(async (questionId) => {
+    if (advancingRef.current) return;
+    advancingRef.current = true;
+    try {
+      try {
+        await emitWithAck('timer_expired', { questionId });
+      } catch {
+        // already stopped
+      }
+
+      const idx = currentIndexRef.current;
+      const list = questionsRef.current;
+      const nextIdx = idx + 1;
+
+      if (presentModeRef.current && nextIdx < list.length) {
+        // Next question — no results screen
+        setResults(null);
+        setActiveQuestion(null);
+        setTimerLeft(null);
+        setAnswerStatus([]);
+        await startQuestionByIndex(nextIdx);
+      } else if (presentModeRef.current) {
+        // Last question — show final results
+        setActiveQuestion((q) => (q ? { ...q, status: 'stopped', is_active: 0 } : q));
+        setTimerLeft(null);
+        setShowFinalResults(true);
+        try {
+          const res = await emitWithAck('show_results', { questionId });
+          setResults(res.results);
+          if (res.leaderboard) setLeaderboard(res.leaderboard);
+        } catch {
+          /* results may already be on host via socket */
+        }
+      } else {
+        setActiveQuestion((q) => (q ? { ...q, status: 'stopped', is_active: 0 } : q));
+        setTimerLeft(null);
+      }
+    } finally {
+      advancingRef.current = false;
+    }
+  }, [startQuestionByIndex]);
 
   const refreshFromHost = useCallback(async () => {
     try {
@@ -87,14 +164,19 @@ export default function HostPage() {
       if (as) setAnswerStatus(as);
     });
 
-    socket.on('results_updated', ({ results: r, leaderboard: lb }) => {
-      setResults(r);
+    socket.on('results_updated', ({ results: r, leaderboard: lb, reason }) => {
       if (lb) setLeaderboard(lb);
+      // In present mode, timer auto-advance handles next step — only keep results if final
+      if (reason === 'timer' && presentModeRef.current) {
+        return;
+      }
+      setResults(r);
     });
 
     socket.on('question_started_host', ({ question, startedAt }) => {
       setActiveQuestion(question);
       setResults(null);
+      setShowFinalResults(false);
       startedAtRef.current = startedAt;
       if (question.timer_seconds > 0) setTimerLeft(question.timer_seconds);
     });
@@ -124,11 +206,11 @@ export default function HostPage() {
       setTimerLeft(left);
       if (left <= 0) {
         clearInterval(timerRef.current);
-        emitWithAck('timer_expired', { questionId: activeQuestion.id }).catch(() => {});
+        handleTimerComplete(activeQuestion.id);
       }
     }, 200);
     return () => clearInterval(timerRef.current);
-  }, [activeQuestion]);
+  }, [activeQuestion, handleTimerComplete]);
 
   const handleCreateQuestion = async (data) => {
     setCreatingQ(true);
@@ -145,16 +227,7 @@ export default function HostPage() {
   };
 
   const handleStart = async () => {
-    const q = questions[currentIndex];
-    if (!q) return;
-    try {
-      await emitWithAck('start_question', { questionId: q.id });
-      setActiveQuestion({ ...q, status: 'active', is_active: 1 });
-      setResults(null);
-      startedAtRef.current = Date.now();
-    } catch (err) {
-      alert(err.message);
-    }
+    await startQuestionByIndex(currentIndex);
   };
 
   const handleStop = async () => {
@@ -176,6 +249,7 @@ export default function HostPage() {
       const res = await emitWithAck('show_results', { questionId: q.id });
       setResults(res.results);
       if (res.leaderboard) setLeaderboard(res.leaderboard);
+      setShowFinalResults(true);
     } catch (err) {
       alert(err.message);
     }
@@ -213,6 +287,7 @@ export default function HostPage() {
 
   const onlineCount = participants.filter((p) => p.is_online).length;
   const currentQ = questions[currentIndex] || null;
+  const isLive = activeQuestion?.status === 'active';
 
   if (loading) {
     return (
@@ -231,6 +306,7 @@ export default function HostPage() {
     );
   }
 
+  // —— PRESENT MODE ——
   if (presentMode) {
     const roomCode = room?.roomCode || '';
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
@@ -238,7 +314,10 @@ export default function HostPage() {
     const qrSrc = joinUrl
       ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=12&data=${encodeURIComponent(joinUrl)}`
       : '';
-    const showLobby = !results && activeQuestion?.status !== 'active';
+    const showLobby = !isLive && !showFinalResults && !results;
+
+    // Compact QR while live or showing final results
+    const qrCompact = isLive || showFinalResults;
 
     return (
       <div className="fixed inset-0 bg-slate-900 text-white flex flex-col z-50">
@@ -251,9 +330,14 @@ export default function HostPage() {
             <span className="text-sm text-white/60 flex items-center gap-1">
               <Users className="w-4 h-4" /> {onlineCount}
             </span>
+            {questions.length > 0 && (
+              <span className="text-sm text-white/50">
+                Q{currentIndex + 1}/{questions.length}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
-            {timerLeft != null && activeQuestion?.status === 'active' && (
+            {timerLeft != null && isLive && (
               <span className={`text-2xl font-bold tabular-nums ${timerLeft <= 5 ? 'text-red-400' : ''}`}>
                 {timerLeft}s
               </span>
@@ -264,85 +348,128 @@ export default function HostPage() {
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col lg:flex-row items-stretch justify-center gap-8 px-6 py-6 overflow-auto">
-          <div className="flex-1 flex flex-col items-center justify-center min-w-0">
-            {showLobby ? (
+        <div className="flex-1 flex flex-col overflow-auto px-6 py-4">
+          {/* Lobby: big QR + join instructions */}
+          {showLobby && (
+            <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-10">
               <div className="text-center max-w-xl">
                 <p className="text-white/50 text-sm uppercase tracking-widest mb-3">Waiting for players</p>
                 <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">Join this game</h1>
-                <p className="text-white/60 mb-8">
+                <p className="text-white/60">
                   Scan the QR code or open the link and enter the room code
                 </p>
               </div>
-            ) : (
-              <>
-                {(activeQuestion || currentQ) && (
-                  <h1 className="font-display text-3xl md:text-5xl font-bold text-center mb-10 max-w-4xl leading-tight">
-                    {(activeQuestion || currentQ).question_text}
-                  </h1>
+              <div className="bg-white rounded-3xl p-6 text-slate-900 shadow-2xl w-full max-w-sm">
+                <p className="text-center text-xs font-semibold uppercase tracking-wider text-brand-600 mb-3">
+                  Scan to join
+                </p>
+                {qrSrc && (
+                  <img
+                    src={qrSrc}
+                    alt={`QR code to join room ${roomCode}`}
+                    className="w-full max-w-[240px] mx-auto rounded-xl"
+                    width={240}
+                    height={240}
+                  />
                 )}
-                {results ? (
-                  <div className="w-full max-w-3xl bg-white text-slate-900 rounded-3xl p-8 shadow-2xl">
-                    <ResultsChart results={results} presentMode />
-                    {leaderboard.length > 0 && (activeQuestion || currentQ)?.is_quiz === 1 && (
-                      <div className="mt-8 border-t border-slate-100 pt-6">
-                        <Leaderboard entries={leaderboard} presentMode />
-                      </div>
-                    )}
+                <div className="mt-5 text-center space-y-3 border-t border-slate-100 pt-4">
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Or visit</p>
+                    <p className="text-sm font-medium text-brand-700 break-all">{origin}</p>
                   </div>
-                ) : activeQuestion?.status === 'active' ? (
-                  <p className="text-xl text-white/50 animate-pulse-soft">Collecting answers…</p>
-                ) : null}
-              </>
-            )}
-          </div>
-
-          <div
-            className={`shrink-0 flex flex-col items-center justify-center ${
-              showLobby ? 'w-full max-w-md mx-auto' : 'lg:w-72'
-            }`}
-          >
-            <div className="bg-white rounded-3xl p-6 text-slate-900 shadow-2xl w-full max-w-sm">
-              <p className="text-center text-xs font-semibold uppercase tracking-wider text-brand-600 mb-3">
-                Scan to join
-              </p>
-              {qrSrc ? (
-                <img
-                  src={qrSrc}
-                  alt={`QR code to join room ${roomCode}`}
-                  className="w-full max-w-[240px] mx-auto rounded-xl bg-white"
-                  width={240}
-                  height={240}
-                />
-              ) : (
-                <div className="w-60 h-60 mx-auto bg-slate-100 rounded-xl" />
-              )}
-              <div className="mt-5 text-center space-y-3 border-t border-slate-100 pt-4">
-                <div>
-                  <p className="text-xs text-slate-500 mb-1">Or visit</p>
-                  <p className="text-sm font-medium text-brand-700 break-all leading-snug">
-                    {origin || 'this website'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 mb-1">Then join with code</p>
-                  <p className="font-mono text-3xl font-bold tracking-[0.2em] text-slate-900">
-                    {roomCode}
-                  </p>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Then join with code</p>
+                    <p className="font-mono text-3xl font-bold tracking-[0.2em]">{roomCode}</p>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Live question: compact QR on top, chart below */}
+          {isLive && (
+            <div className="flex-1 flex flex-col gap-4 max-w-5xl mx-auto w-full">
+              <div className="flex flex-col sm:flex-row items-start gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-white/40 text-xs uppercase tracking-wider mb-2">
+                    Question {currentIndex + 1} of {questions.length}
+                  </p>
+                  <h1 className="font-display text-2xl md:text-4xl font-bold leading-tight">
+                    {(activeQuestion || currentQ)?.question_text}
+                  </h1>
+                </div>
+                {/* Half-size QR */}
+                <div className="shrink-0 bg-white rounded-2xl p-3 text-slate-900 shadow-xl w-[140px]">
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-brand-600 text-center mb-1">
+                    Scan to join
+                  </p>
+                  {qrSrc && (
+                    <img
+                      src={qrSrc}
+                      alt="Join QR"
+                      className="w-full rounded-lg"
+                      width={120}
+                      height={120}
+                    />
+                  )}
+                  <p className="font-mono text-center text-sm font-bold tracking-widest mt-1">{roomCode}</p>
+                </div>
+              </div>
+
+              <div className="flex-1 bg-white text-slate-900 rounded-3xl p-6 shadow-2xl min-h-[280px]">
+                <p className="text-sm font-medium text-slate-500 mb-3">Live answers</p>
+                {results ? (
+                  <ResultsChart results={results} presentMode />
+                ) : (
+                  <p className="text-center text-slate-400 py-16 animate-pulse-soft">
+                    Collecting answers…
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Final results after last question */}
+          {showFinalResults && !isLive && (
+            <div className="flex-1 flex flex-col gap-4 max-w-5xl mx-auto w-full">
+              <div className="flex items-start gap-4">
+                <div className="flex-1">
+                  <p className="text-white/40 text-xs uppercase tracking-wider mb-2">Game complete</p>
+                  <h1 className="font-display text-2xl md:text-4xl font-bold">Final results</h1>
+                </div>
+                <div className="shrink-0 bg-white rounded-2xl p-3 text-slate-900 shadow-xl w-[140px]">
+                  <p className="text-[9px] font-semibold uppercase tracking-wider text-brand-600 text-center mb-1">
+                    Scan to join
+                  </p>
+                  {qrSrc && (
+                    <img src={qrSrc} alt="Join QR" className="w-full rounded-lg" width={120} height={120} />
+                  )}
+                  <p className="font-mono text-center text-sm font-bold tracking-widest mt-1">{roomCode}</p>
+                </div>
+              </div>
+              <div className="bg-white text-slate-900 rounded-3xl p-6 shadow-2xl">
+                {results && <ResultsChart results={results} presentMode />}
+                {leaderboard.length > 0 && (
+                  <div className="mt-8 border-t border-slate-100 pt-6">
+                    <Leaderboard entries={leaderboard} presentMode />
+                  </div>
+                )}
+                {!results && leaderboard.length === 0 && (
+                  <p className="text-center text-slate-400 py-12">No results yet</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-center gap-3 py-4 bg-black/20">
-          <button onClick={handleStart} className="btn-accent" disabled={!currentQ}>
+          <button onClick={handleStart} className="btn-accent" disabled={!currentQ || isLive}>
             <Play className="w-4 h-4" /> Start
           </button>
           <button
             onClick={handleStop}
             className="btn bg-white/15 text-white hover:bg-white/25"
-            disabled={!activeQuestion || activeQuestion.status !== 'active'}
+            disabled={!isLive}
           >
             <Square className="w-4 h-4" /> Stop
           </button>
@@ -352,14 +479,14 @@ export default function HostPage() {
           <button
             onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
             className="btn bg-white/15 text-white hover:bg-white/25"
-            disabled={currentIndex <= 0}
+            disabled={currentIndex <= 0 || isLive}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
             onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
             className="btn bg-white/15 text-white hover:bg-white/25"
-            disabled={currentIndex >= questions.length - 1}
+            disabled={currentIndex >= questions.length - 1 || isLive}
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -368,6 +495,7 @@ export default function HostPage() {
     );
   }
 
+  // —— NORMAL HOST DASHBOARD ——
   return (
     <div className="flex-1 flex flex-col bg-slate-50 min-h-dvh">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
@@ -428,7 +556,7 @@ export default function HostPage() {
               <button
                 key={q.id}
                 type="button"
-                onClick={() => { setCurrentIndex(i); setResults(null); }}
+                onClick={() => { setCurrentIndex(i); setResults(null); setShowFinalResults(false); }}
                 className={`w-full text-left card p-3 transition ${
                   i === currentIndex ? 'ring-2 ring-brand-500 border-brand-200' : 'hover:border-slate-200'
                 }`}
@@ -463,7 +591,7 @@ export default function HostPage() {
             <div className="card p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">
                 Question {currentIndex + 1} of {questions.length}
-                {timerLeft != null && activeQuestion?.status === 'active' && (
+                {timerLeft != null && isLive && (
                   <span className={`ml-3 tabular-nums ${timerLeft <= 5 ? 'text-red-500' : 'text-brand-600'}`}>
                     ⏱ {timerLeft}s
                   </span>
@@ -491,15 +619,11 @@ export default function HostPage() {
                 <button
                   onClick={handleStart}
                   className="btn-accent"
-                  disabled={activeQuestion?.status === 'active' && activeQuestion?.id === currentQ.id}
+                  disabled={isLive && activeQuestion?.id === currentQ.id}
                 >
                   <Play className="w-4 h-4" /> Start
                 </button>
-                <button
-                  onClick={handleStop}
-                  className="btn-secondary"
-                  disabled={!activeQuestion || activeQuestion.status !== 'active'}
-                >
+                <button onClick={handleStop} className="btn-secondary" disabled={!isLive}>
                   <Square className="w-4 h-4" /> Stop
                 </button>
                 <button onClick={handleShowResults} className="btn-secondary">
@@ -550,7 +674,7 @@ export default function HostPage() {
                     <li key={p.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm">
                       <span className={`w-2 h-2 rounded-full shrink-0 ${p.is_online ? 'bg-accent-500' : 'bg-slate-300'}`} />
                       <span className="flex-1 truncate text-slate-700">{p.name}</span>
-                      {activeQuestion?.status === 'active' && (
+                      {isLive && (
                         <span className={`text-[10px] ${answered ? 'text-accent-600' : 'text-slate-400'}`}>
                           {answered ? '✓' : '…'}
                         </span>
