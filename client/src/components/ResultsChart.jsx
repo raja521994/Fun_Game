@@ -89,13 +89,14 @@ export default function ResultsChart({ results, presentMode = false }) {
   }));
 
   // Pie for yes/no or few options in present mode
+  const hasVotes = data.some((d) => d.count > 0);
   const usePie =
     presentMode &&
+    hasVotes &&
     (type === 'yes_no' || (type === 'multiple_choice' && data.length > 0 && data.length <= 6));
 
   if (usePie) {
-    const pieData = data.filter((d) => d.count > 0);
-    const chartData = pieData.length ? pieData : data;
+    const chartData = data;
     return (
       <div className="w-full">
         <div className="w-full h-full min-h-[200px] max-h-[min(360px,50vh)]">

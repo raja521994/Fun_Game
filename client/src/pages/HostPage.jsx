@@ -40,6 +40,7 @@ export default function HostPage() {
   const [answerStatus, setAnswerStatus] = useState([]);
   const [showFinalResults, setShowFinalResults] = useState(false);
   const [betweenQuestions, setBetweenQuestions] = useState(false);
+  const [readyForResults, setReadyForResults] = useState(false);
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
   const [timerLeft, setTimerLeft] = useState(null);
@@ -71,6 +72,7 @@ export default function HostPage() {
       setResults(null);
       setShowFinalResults(false);
       setBetweenQuestions(false);
+      setReadyForResults(false);
       startedAtRef.current = Date.now();
       if (q.timer_seconds > 0) setTimerLeft(q.timer_seconds);
       else setTimerLeft(null);
@@ -105,7 +107,8 @@ export default function HostPage() {
         setCurrentIndex(nextIdx);
       } else if (presentModeRef.current) {
         setBetweenQuestions(false);
-        setShowFinalResults(true);
+        setReadyForResults(true);
+        setShowFinalResults(false);
         try {
           const res = await emitWithAck('show_results', { questionId });
           if (res.leaderboard) setLeaderboard(res.leaderboard);
@@ -249,7 +252,8 @@ export default function HostPage() {
           setCurrentIndex(nextIdx);
         } else {
           setBetweenQuestions(false);
-          setShowFinalResults(true);
+          setReadyForResults(true);
+          setShowFinalResults(false);
           if (res.leaderboard) setLeaderboard(res.leaderboard);
           else {
             try {
@@ -338,9 +342,32 @@ export default function HostPage() {
     const qrSrc = joinUrl
       ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(joinUrl)}`
       : '';
-    const showLobby = !isLive && !showFinalResults && !betweenQuestions;
+    const showLobby = !isLive && !showFinalResults && !betweenQuestions && !readyForResults;
+
+    // Build chart data even with 0 answers
+    const liveChartResults = (() => {
+      if (results) return results;
+      const q = activeQuestion || currentQ;
+      if (!q) return null;
+      const opts = q.options || [];
+      return {
+        type: q.type || 'multiple_choice',
+        options: opts.map((o) => ({
+          text: o.option_text || o.text || 'Option',
+          count: 0,
+          percentage: 0,
+        })),
+        totalAnswers: 0,
+        average: null,
+      };
+    })();
 
     const goNext = () => {
+      if (readyForResults) {
+        setReadyForResults(false);
+        setShowFinalResults(true);
+        return;
+      }
       if (betweenQuestions) {
         startQuestionByIndex(currentIndex);
         return;
@@ -351,6 +378,10 @@ export default function HostPage() {
     };
 
     const goPrev = () => {
+      if (readyForResults) {
+        setReadyForResults(false);
+        return;
+      }
       if (betweenQuestions) {
         setBetweenQuestions(false);
         setCurrentIndex((i) => Math.max(0, i - 1));
@@ -390,7 +421,6 @@ export default function HostPage() {
 
     return (
       <div className="fixed inset-0 bg-slate-900 text-white flex flex-col z-50 overflow-hidden h-[100dvh]">
-        {/* Top bar */}
         <div className="flex items-center justify-between px-4 py-2 bg-black/30 shrink-0 h-12">
           <div className="flex items-center gap-3 min-w-0">
             <span className="font-display font-bold text-base">Fun Game</span>
@@ -416,9 +446,7 @@ export default function HostPage() {
           </div>
         </div>
 
-        {/* Main — no page scroll */}
         <div className="flex-1 min-h-0 overflow-hidden px-4 py-3 flex flex-col">
-          {/* Lobby */}
           {showLobby && (
             <div className="flex-1 min-h-0 flex flex-row items-center justify-center gap-8">
               <JoinCard />
@@ -430,7 +458,6 @@ export default function HostPage() {
             </div>
           )}
 
-          {/* Pause between questions — manual next only */}
           {betweenQuestions && !isLive && (
             <div className="flex-1 min-h-0 flex flex-row items-center justify-center gap-8">
               <JoinCard />
@@ -455,7 +482,39 @@ export default function HostPage() {
             </div>
           )}
 
-          {/* Live — compact, fits viewport */}
+          {/* After last question — ready for results (manual) */}
+          {readyForResults && !isLive && (
+            <div className="flex-1 min-h-0 flex flex-row items-center justify-center gap-8 px-4">
+              <div className="flex flex-col items-center gap-3 shrink-0">
+                <div className="text-7xl md:text-8xl select-none" aria-hidden>
+                  🏆
+                </div>
+                <div className="flex gap-3 text-4xl md:text-5xl select-none" aria-hidden>
+                  <span>🎉</span>
+                  <span>✨</span>
+                  <span>🎊</span>
+                </div>
+                <div className="flex gap-2 text-3xl select-none mt-1" aria-hidden>
+                  <span>🌟</span>
+                  <span>💫</span>
+                  <span>⭐</span>
+                </div>
+              </div>
+              <div className="text-left max-w-lg">
+                <p className="text-white/50 text-xs uppercase tracking-widest mb-2">All questions complete</p>
+                <h1 className="font-display text-3xl md:text-5xl font-bold mb-3 leading-tight">
+                  Are you ready for the results?
+                </h1>
+                <p className="text-white/60 text-sm mb-6">
+                  Build the suspense — reveal the final scores when your audience is ready
+                </p>
+                <button type="button" onClick={goNext} className="btn-accent px-8 py-3">
+                  <Play className="w-4 h-4" /> Reveal scores
+                </button>
+              </div>
+            </div>
+          )}
+
           {isLive && (
             <div className="flex-1 min-h-0 flex flex-col gap-2 max-w-6xl mx-auto w-full">
               <div className="flex items-start gap-3 shrink-0">
@@ -470,21 +529,18 @@ export default function HostPage() {
                 <JoinCard compact />
               </div>
               <div className="flex-1 min-h-0 bg-white text-slate-900 rounded-2xl p-4 md:p-6 shadow-2xl overflow-hidden flex flex-col">
-                {results ? (
+                {liveChartResults ? (
                   <div className="flex-1 min-h-0">
-                    <ResultsChart results={results} presentMode />
+                    <ResultsChart results={liveChartResults} presentMode />
                   </div>
                 ) : (
-                  <p className="text-center text-slate-400 m-auto text-base animate-pulse-soft">
-                    Collecting answers…
-                  </p>
+                  <p className="text-center text-slate-400 m-auto text-base">No options for this question</p>
                 )}
               </div>
             </div>
           )}
 
-          {/* Final scores only */}
-          {showFinalResults && !isLive && !betweenQuestions && (
+          {showFinalResults && !isLive && !betweenQuestions && !readyForResults && (
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 max-w-xl mx-auto w-full overflow-hidden">
               <div className="text-center shrink-0">
                 <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Game complete</p>
@@ -501,9 +557,8 @@ export default function HostPage() {
           )}
         </div>
 
-        {/* Bottom controls */}
         <div className="flex justify-center items-center gap-2 py-2.5 bg-black/30 shrink-0 h-14">
-          {!betweenQuestions && (
+          {!betweenQuestions && !readyForResults && (
             <button onClick={handleStart} className="btn-accent text-sm py-2" disabled={!currentQ || isLive || showFinalResults}>
               <Play className="w-4 h-4" /> Start
             </button>
@@ -513,13 +568,18 @@ export default function HostPage() {
               <Play className="w-4 h-4" /> Start next
             </button>
           )}
+          {readyForResults && (
+            <button onClick={goNext} className="btn-accent text-sm py-2">
+              <Play className="w-4 h-4" /> Reveal scores
+            </button>
+          )}
           <button onClick={handleStop} className="btn bg-white/15 text-white hover:bg-white/25 text-sm py-2" disabled={!isLive}>
             <Square className="w-4 h-4" /> Stop
           </button>
           <button
             onClick={goPrev}
             className="btn bg-white/15 text-white hover:bg-white/25 text-sm py-2 px-3"
-            disabled={isLive || (currentIndex <= 0 && !betweenQuestions)}
+            disabled={isLive || showFinalResults || (currentIndex <= 0 && !betweenQuestions && !readyForResults)}
             title="Previous"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -527,7 +587,7 @@ export default function HostPage() {
           <button
             onClick={goNext}
             className="btn bg-white/15 text-white hover:bg-white/25 text-sm py-2 px-3"
-            disabled={isLive || showFinalResults || (!betweenQuestions && currentIndex >= questions.length - 1)}
+            disabled={isLive || showFinalResults || (!betweenQuestions && !readyForResults && currentIndex >= questions.length - 1)}
             title="Next"
           >
             <ChevronRight className="w-4 h-4" />
