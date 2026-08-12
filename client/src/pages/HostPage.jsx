@@ -86,7 +86,7 @@ export default function HostPage() {
       try {
         await emitWithAck('timer_expired', { questionId });
       } catch {
-        // already stopped
+        /* already stopped */
       }
 
       const idx = currentIndexRef.current;
@@ -99,18 +99,17 @@ export default function HostPage() {
       setAnswerStatus([]);
 
       if (presentModeRef.current && nextIdx < list.length) {
-        // Interstitial: ready for next?
+        // Pause — host must click next manually
         setBetweenQuestions(true);
         setShowFinalResults(false);
         setCurrentIndex(nextIdx);
       } else if (presentModeRef.current) {
-        // Last question — final scores only
         setBetweenQuestions(false);
         setShowFinalResults(true);
         try {
           const res = await emitWithAck('show_results', { questionId });
           if (res.leaderboard) setLeaderboard(res.leaderboard);
-          setResults(null); // no per-question chart at end — scores only
+          setResults(null);
         } catch {
           /* ok */
         }
@@ -236,8 +235,32 @@ export default function HostPage() {
     try {
       const res = await emitWithAck('stop_question', { questionId: activeQuestion.id });
       setActiveQuestion((q) => (q ? { ...q, status: 'stopped', is_active: 0 } : q));
-      setResults(res.results);
       setTimerLeft(null);
+
+      if (presentModeRef.current) {
+        const idx = currentIndexRef.current;
+        const list = questionsRef.current;
+        const nextIdx = idx + 1;
+        setResults(null);
+        setAnswerStatus([]);
+        if (nextIdx < list.length) {
+          setBetweenQuestions(true);
+          setShowFinalResults(false);
+          setCurrentIndex(nextIdx);
+        } else {
+          setBetweenQuestions(false);
+          setShowFinalResults(true);
+          if (res.leaderboard) setLeaderboard(res.leaderboard);
+          else {
+            try {
+              const r2 = await emitWithAck('show_results', { questionId: activeQuestion.id });
+              if (r2.leaderboard) setLeaderboard(r2.leaderboard);
+            } catch { /* ok */ }
+          }
+        }
+      } else {
+        setResults(res.results);
+      }
     } catch (err) {
       alert(err.message);
     }
@@ -313,142 +336,146 @@ export default function HostPage() {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const joinUrl = roomCode ? `${origin}/join/${roomCode}` : origin;
     const qrSrc = joinUrl
-      ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&margin=12&data=${encodeURIComponent(joinUrl)}`
+      ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(joinUrl)}`
       : '';
     const showLobby = !isLive && !showFinalResults && !betweenQuestions;
 
+    const goNext = () => {
+      if (betweenQuestions) {
+        startQuestionByIndex(currentIndex);
+        return;
+      }
+      if (!isLive && currentIndex < questions.length - 1) {
+        setCurrentIndex((i) => i + 1);
+      }
+    };
+
+    const goPrev = () => {
+      if (betweenQuestions) {
+        setBetweenQuestions(false);
+        setCurrentIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+      if (!isLive && currentIndex > 0) {
+        setCurrentIndex((i) => i - 1);
+      }
+    };
+
     const JoinCard = ({ compact = false }) => (
       <div
-        className={`bg-white rounded-3xl text-slate-900 shadow-2xl ${
-          compact ? 'p-3 w-[140px]' : 'p-6 w-full max-w-sm'
+        className={`bg-white rounded-2xl text-slate-900 shadow-xl shrink-0 ${
+          compact ? 'p-2 w-[110px]' : 'p-4 w-[200px]'
         }`}
       >
-        <p
-          className={`text-center font-semibold uppercase tracking-wider text-brand-600 ${
-            compact ? 'text-[9px] mb-1' : 'text-xs mb-3'
-          }`}
-        >
+        <p className={`text-center font-semibold uppercase tracking-wider text-brand-600 ${compact ? 'text-[8px] mb-1' : 'text-[10px] mb-2'}`}>
           Scan to join
         </p>
         {qrSrc && (
           <img
             src={qrSrc}
-            alt={`QR code to join room ${roomCode}`}
-            className={`mx-auto rounded-xl ${compact ? 'w-full' : 'w-full max-w-[240px]'}`}
-            width={compact ? 120 : 240}
-            height={compact ? 120 : 240}
+            alt={`QR ${roomCode}`}
+            className="w-full rounded-lg"
+            width={compact ? 90 : 160}
+            height={compact ? 90 : 160}
           />
         )}
+        <p className={`font-mono text-center font-bold tracking-widest mt-1 ${compact ? 'text-xs' : 'text-sm'}`}>
+          {roomCode}
+        </p>
         {!compact && (
-          <div className="mt-5 text-center space-y-3 border-t border-slate-100 pt-4">
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Or visit</p>
-              <p className="text-sm font-medium text-brand-700 break-all">{origin}</p>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Then join with code</p>
-              <p className="font-mono text-3xl font-bold tracking-[0.2em]">{roomCode}</p>
-            </div>
-          </div>
-        )}
-        {compact && (
-          <p className="font-mono text-center text-sm font-bold tracking-widest mt-1">{roomCode}</p>
+          <p className="text-[10px] text-slate-500 text-center mt-1 break-all leading-tight">{origin}</p>
         )}
       </div>
     );
 
     return (
-      <div className="fixed inset-0 bg-slate-900 text-white flex flex-col z-50">
-        <div className="flex items-center justify-between px-6 py-3 bg-black/30">
-          <div className="flex items-center gap-4">
-            <span className="font-display font-bold text-lg">Fun Game</span>
-            <span className="font-mono tracking-widest bg-white/10 px-3 py-1 rounded-lg text-sm">
-              {roomCode}
-            </span>
-            <span className="text-sm text-white/60 flex items-center gap-1">
-              <Users className="w-4 h-4" /> {onlineCount}
+      <div className="fixed inset-0 bg-slate-900 text-white flex flex-col z-50 overflow-hidden h-[100dvh]">
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-4 py-2 bg-black/30 shrink-0 h-12">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="font-display font-bold text-base">Fun Game</span>
+            <span className="font-mono tracking-widest bg-white/10 px-2 py-0.5 rounded text-xs">{roomCode}</span>
+            <span className="text-xs text-white/60 flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" /> {onlineCount}
             </span>
             {questions.length > 0 && (
-              <span className="text-sm text-white/50">
+              <span className="text-xs text-white/50">
                 Q{Math.min(currentIndex + 1, questions.length)}/{questions.length}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
             {timerLeft != null && isLive && (
-              <span className={`text-2xl font-bold tabular-nums ${timerLeft <= 5 ? 'text-red-400' : ''}`}>
+              <span className={`text-xl font-bold tabular-nums ${timerLeft <= 5 ? 'text-red-400' : ''}`}>
                 {timerLeft}s
               </span>
             )}
-            <button onClick={() => setPresentMode(false)} className="btn-ghost text-white hover:bg-white/10">
-              <X className="w-5 h-5" /> Exit present
+            <button onClick={() => setPresentMode(false)} className="btn-ghost text-white hover:bg-white/10 text-sm py-1">
+              <X className="w-4 h-4" /> Exit
             </button>
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col overflow-auto px-6 py-4">
+        {/* Main — no page scroll */}
+        <div className="flex-1 min-h-0 overflow-hidden px-4 py-3 flex flex-col">
           {/* Lobby */}
           {showLobby && (
-            <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-10">
-              <div className="text-center max-w-xl order-2 lg:order-1">
-                <p className="text-white/50 text-sm uppercase tracking-widest mb-3">Waiting for players</p>
-                <h1 className="font-display text-3xl md:text-4xl font-bold mb-2">Join this game</h1>
-                <p className="text-white/60">
-                  Scan the QR code or open the link and enter the room code
-                </p>
-              </div>
-              <div className="order-1 lg:order-2">
-                <JoinCard />
+            <div className="flex-1 min-h-0 flex flex-row items-center justify-center gap-8">
+              <JoinCard />
+              <div className="text-left max-w-md">
+                <p className="text-white/50 text-xs uppercase tracking-widest mb-2">Waiting for players</p>
+                <h1 className="font-display text-3xl font-bold mb-2">Join this game</h1>
+                <p className="text-white/60 text-sm">Scan the QR or visit the site and enter the room code</p>
               </div>
             </div>
           )}
 
-          {/* Between questions interstitial */}
+          {/* Pause between questions — manual next only */}
           {betweenQuestions && !isLive && (
-            <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-10">
-              <div className="order-1">
-                <JoinCard />
-              </div>
-              <div className="text-center max-w-xl order-2">
-                <p className="text-white/50 text-sm uppercase tracking-widest mb-3">
-                  Question {currentIndex + 1} of {questions.length}
+            <div className="flex-1 min-h-0 flex flex-row items-center justify-center gap-8">
+              <JoinCard />
+              <div className="text-left max-w-lg">
+                <p className="text-white/50 text-xs uppercase tracking-widest mb-2">
+                  Up next · Question {currentIndex + 1} of {questions.length}
                 </p>
-                <h1 className="font-display text-3xl md:text-5xl font-bold mb-4 leading-tight">
+                <h1 className="font-display text-3xl md:text-4xl font-bold mb-3 leading-tight">
                   Are you ready for the next puzzle?
                 </h1>
-                <p className="text-white/60 mb-8">
-                  Get ready — the next question is about to start
+                <p className="text-white/60 text-sm mb-6">
+                  Press Start next or use the arrow below when your audience is ready
                 </p>
                 <button
                   type="button"
                   onClick={() => startQuestionByIndex(currentIndex)}
-                  className="btn-accent text-lg px-10 py-4"
+                  className="btn-accent px-8 py-3"
                 >
-                  <Play className="w-5 h-5" /> Start next question
+                  <Play className="w-4 h-4" /> Start next question
                 </button>
               </div>
             </div>
           )}
 
-          {/* Live question — white Mentimeter-style board + small QR */}
+          {/* Live — compact, fits viewport */}
           {isLive && (
-            <div className="flex-1 flex flex-col gap-4 max-w-6xl mx-auto w-full">
-              <div className="flex flex-col sm:flex-row items-start gap-4">
+            <div className="flex-1 min-h-0 flex flex-col gap-2 max-w-6xl mx-auto w-full">
+              <div className="flex items-start gap-3 shrink-0">
                 <div className="flex-1 min-w-0">
-                  <p className="text-white/40 text-xs uppercase tracking-wider mb-2">
+                  <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">
                     Question {currentIndex + 1} of {questions.length}
                   </p>
-                  <h1 className="font-display text-2xl md:text-4xl font-bold leading-tight">
+                  <h1 className="font-display text-xl md:text-3xl font-bold leading-snug line-clamp-3">
                     {(activeQuestion || currentQ)?.question_text}
                   </h1>
                 </div>
                 <JoinCard compact />
               </div>
-              <div className="flex-1 bg-white text-slate-900 rounded-3xl p-6 md:p-10 shadow-2xl min-h-[300px]">
+              <div className="flex-1 min-h-0 bg-white text-slate-900 rounded-2xl p-4 md:p-6 shadow-2xl overflow-hidden flex flex-col">
                 {results ? (
-                  <ResultsChart results={results} presentMode />
+                  <div className="flex-1 min-h-0">
+                    <ResultsChart results={results} presentMode />
+                  </div>
                 ) : (
-                  <p className="text-center text-slate-400 py-20 animate-pulse-soft text-lg">
+                  <p className="text-center text-slate-400 m-auto text-base animate-pulse-soft">
                     Collecting answers…
                   </p>
                 )}
@@ -456,56 +483,52 @@ export default function HostPage() {
             </div>
           )}
 
-          {/* Final: scores only (no mid-quiz leaderboard) */}
+          {/* Final scores only */}
           {showFinalResults && !isLive && !betweenQuestions && (
-            <div className="flex-1 flex flex-col gap-6 max-w-3xl mx-auto w-full items-center justify-center">
-              <div className="text-center">
-                <p className="text-white/40 text-xs uppercase tracking-wider mb-2">Game complete</p>
-                <h1 className="font-display text-3xl md:text-5xl font-bold">Final scores</h1>
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 max-w-xl mx-auto w-full overflow-hidden">
+              <div className="text-center shrink-0">
+                <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Game complete</p>
+                <h1 className="font-display text-3xl font-bold">Final scores</h1>
               </div>
-              <div className="bg-white text-slate-900 rounded-3xl p-8 shadow-2xl w-full">
+              <div className="bg-white text-slate-900 rounded-2xl p-5 shadow-2xl w-full flex-1 min-h-0 overflow-y-auto">
                 {leaderboard.length > 0 ? (
                   <Leaderboard entries={leaderboard} presentMode />
                 ) : (
-                  <p className="text-center text-slate-400 py-12">No scores yet</p>
+                  <p className="text-center text-slate-400 py-8">No scores yet</p>
                 )}
               </div>
             </div>
           )}
         </div>
 
-        <div className="flex justify-center gap-3 py-4 bg-black/20">
+        {/* Bottom controls */}
+        <div className="flex justify-center items-center gap-2 py-2.5 bg-black/30 shrink-0 h-14">
           {!betweenQuestions && (
-            <button onClick={handleStart} className="btn-accent" disabled={!currentQ || isLive}>
+            <button onClick={handleStart} className="btn-accent text-sm py-2" disabled={!currentQ || isLive || showFinalResults}>
               <Play className="w-4 h-4" /> Start
             </button>
           )}
           {betweenQuestions && (
-            <button
-              onClick={() => startQuestionByIndex(currentIndex)}
-              className="btn-accent"
-            >
+            <button onClick={() => startQuestionByIndex(currentIndex)} className="btn-accent text-sm py-2">
               <Play className="w-4 h-4" /> Start next
             </button>
           )}
-          <button
-            onClick={handleStop}
-            className="btn bg-white/15 text-white hover:bg-white/25"
-            disabled={!isLive}
-          >
+          <button onClick={handleStop} className="btn bg-white/15 text-white hover:bg-white/25 text-sm py-2" disabled={!isLive}>
             <Square className="w-4 h-4" /> Stop
           </button>
           <button
-            onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-            className="btn bg-white/15 text-white hover:bg-white/25"
-            disabled={currentIndex <= 0 || isLive || betweenQuestions}
+            onClick={goPrev}
+            className="btn bg-white/15 text-white hover:bg-white/25 text-sm py-2 px-3"
+            disabled={isLive || (currentIndex <= 0 && !betweenQuestions)}
+            title="Previous"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
-            onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
-            className="btn bg-white/15 text-white hover:bg-white/25"
-            disabled={currentIndex >= questions.length - 1 || isLive || betweenQuestions}
+            onClick={goNext}
+            className="btn bg-white/15 text-white hover:bg-white/25 text-sm py-2 px-3"
+            disabled={isLive || showFinalResults || (!betweenQuestions && currentIndex >= questions.length - 1)}
+            title="Next"
           >
             <ChevronRight className="w-4 h-4" />
           </button>

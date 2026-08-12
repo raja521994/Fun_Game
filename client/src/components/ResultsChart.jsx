@@ -98,7 +98,7 @@ export default function ResultsChart({ results, presentMode = false }) {
     const chartData = pieData.length ? pieData : data;
     return (
       <div className="w-full">
-        <div className="w-full h-[320px] md:h-[380px]">
+        <div className="w-full h-full min-h-[200px] max-h-[min(360px,50vh)]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -107,7 +107,7 @@ export default function ResultsChart({ results, presentMode = false }) {
                 nameKey="name"
                 cx="50%"
                 cy="50%"
-                outerRadius={presentMode ? 140 : 110}
+                outerRadius={presentMode ? 110 : 90}
                 innerRadius={0}
                 paddingAngle={1}
                 stroke="#fff"
@@ -149,10 +149,10 @@ export default function ResultsChart({ results, presentMode = false }) {
   if (presentMode) {
     return (
       <div className="w-full">
-        <ResponsiveContainer width="100%" height={Math.max(280, data.length * 48 + 40)}>
+        <ResponsiveContainer width="100%" height={220}>
           <BarChart
             data={data}
-            margin={{ top: 28, right: 16, left: 8, bottom: 48 }}
+            margin={{ top: 24, right: 12, left: 4, bottom: 36 }}
           >
             <XAxis
               dataKey="name"
