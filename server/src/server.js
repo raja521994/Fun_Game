@@ -6,6 +6,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const { Server } = require('socket.io');
 const { initSchema } = require('./database/db');
+const authService = require('./services/authService');
 const routes = require('./routes');
 const { registerSocketHandlers } = require('./socket/handlers');
 
@@ -15,6 +16,7 @@ const isProd = process.env.NODE_ENV === 'production';
 
 // Init DB
 initSchema();
+authService.ensureRootAdmin().catch((e) => console.error('Seed admin failed:', e.message));
 
 const app = express();
 const server = http.createServer(app);

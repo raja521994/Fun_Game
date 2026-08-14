@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Monitor, Users, Trash2, ArrowRight, Copy, Check, QrCode } from 'lucide-react';
+import { Plus, Monitor, Trash2, ArrowRight, Copy, Check, LogOut } from 'lucide-react';
 import api from '../services/api';
-import { loadHostRooms, upsertHostRoom, removeHostRoom, updateHostRoom } from '../utils/hostRooms';
+import { isLoggedIn, getAuthUser, clearAuth } from '../utils/auth';
+import { upsertHostRoom, removeHostRoom } from '../utils/hostRooms';
+
+function initials(user) {
+  if (!user) return '?';
+  const s = user.name || user.email || '?';
+  const parts = s.replace(/@.*$/, '').split(/[.\s_]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return s.slice(0, 2).toUpperCase();
+}
 
 export default function HostDashboard() {
   const navigate = useNavigate();
@@ -11,29 +20,65 @@ export default function HostDashboard() {
   const [title, setTitle] = useState('');
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const user = getAuthUser();
 
-  const refresh = () => setRooms(loadHostRooms());
+  const loadRooms = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.listMyRooms();
+      const list = res.rooms || [];
+      setRooms(list);
+      // keep local cache for host token shortcuts only for this user's rooms
+      list.forEach((r) =>
+        upsertHostRoom({
+          hostToken: r.hostToken,
+          roomCode: r.roomCode,
+          roomId: r.roomId,
+          title: r.title,
+          status: r.status,
+          createdAt: r.createdAt,
+        })
+      );
+    } catch (err) {
+      setError(err.message || 'Could not load rooms');
+      if (err.status === 401) {
+        clearAuth();
+        navigate('/login', { state: { from: '/rooms' } });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    refresh();
-  }, []);
+    if (!isLoggedIn()) {
+      navigate('/login', { state: { from: '/rooms' } });
+      return;
+    }
+    loadRooms();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate]);
 
   const handleCreate = async (e) => {
-    e?.preventDefault();
+    e.preventDefault();
+    e.stopPropagation();
     setCreating(true);
     setError('');
     try {
-      const room = await api.createRoom(title.trim() || `Room ${loadHostRooms().length + 1}`);
+      const name = title.trim() || `Room ${rooms.length + 1}`;
+      const room = await api.createRoom(name);
       upsertHostRoom({
         hostToken: room.hostToken,
         roomCode: room.roomCode,
         roomId: room.roomId,
-        title: room.title || title || 'Fun Game Session',
-        status: room.status || 'waiting',
+        title: room.title,
+        status: room.status,
         createdAt: new Date().toISOString(),
       });
       setTitle('');
-      refresh();
+      await loadRooms();
       navigate(`/host/${room.hostToken}`);
     } catch (err) {
       setError(err.message || 'Could not create room');
@@ -42,12 +87,12 @@ export default function HostDashboard() {
     }
   };
 
-  const handleRemove = (hostToken, e) => {
+  const handleRemove = async (room, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm('Remove this room from your list? (The room still exists on the server until it ends.)')) return;
-    removeHostRoom(hostToken);
-    refresh();
+    if (!confirm('Remove this room from your list? You can still end it from the host panel.')) return;
+    removeHostRoom(room.hostToken);
+    setRooms((prev) => prev.filter((r) => r.hostToken !== room.hostToken));
   };
 
   const copyCode = (code, e) => {
@@ -58,28 +103,74 @@ export default function HostDashboard() {
     setTimeout(() => setCopied(null), 1500);
   };
 
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {
+      /* */
+    }
+    clearAuth();
+    navigate('/login');
+  };
+
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
   return (
     <div className="flex-1 bg-slate-50 min-h-dvh">
       <header className="bg-white border-b border-slate-200">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link to="/" className="font-display font-bold text-brand-700 text-lg">Fun Game</Link>
-          <Link to="/join" className="text-sm text-slate-500 hover:text-brand-600">Join a room</Link>
+        <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+          <Link to="/" className="font-display font-bold text-brand-700 text-lg">
+            Fun Game
+          </Link>
+          <div className="flex items-center gap-3 text-sm">
+            {user?.role === 'admin' && (
+              <Link to="/users" className="text-slate-500 hover:text-brand-600 hidden sm:inline">
+                Manage users
+              </Link>
+            )}
+            <Link to="/join" className="text-slate-500 hover:text-brand-600 hidden sm:inline">
+              Join a room
+            </Link>
+            {user && (
+              <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
+                <div
+                  className="w-8 h-8 rounded-full bg-brand-600 text-white text-xs font-bold flex items-center justify-center shrink-0"
+                  title={user.email}
+                >
+                  {initials(user)}
+                </div>
+                <div className="hidden sm:block min-w-0">
+                  <p className="text-xs font-medium text-slate-800 truncate max-w-[140px]">
+                    {user.name || user.email}
+                  </p>
+                  <p className="text-[10px] text-slate-400 truncate max-w-[140px]">{user.email}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="btn-ghost p-2 text-slate-400 hover:text-red-500"
+                  title="Log out"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-          <div>
-            <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900">Your rooms</h1>
-            <p className="text-slate-500 text-sm mt-1">
-              Create multiple rooms. Each has its own code, QR, questions, and results.
-            </p>
-          </div>
+        <div className="mb-8">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-900">Your rooms</h1>
+          <p className="text-slate-500 text-sm mt-1">
+            Only rooms you create appear here. Create one when you are ready.
+          </p>
         </div>
 
-        <form onSubmit={handleCreate} className="card p-4 sm:p-5 mb-8 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+        <form
+          onSubmit={handleCreate}
+          className="card p-4 sm:p-5 mb-8 flex flex-col sm:flex-row gap-3 items-stretch sm:items-end"
+        >
           <div className="flex-1">
             <label className="label">New room name</label>
             <input
@@ -98,11 +189,13 @@ export default function HostDashboard() {
 
         {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
 
-        {rooms.length === 0 ? (
+        {loading ? (
+          <p className="text-center text-slate-400 py-12">Loading your rooms…</p>
+        ) : rooms.length === 0 ? (
           <div className="card p-12 text-center text-slate-400">
             <Monitor className="w-10 h-10 mx-auto mb-3 opacity-40" />
             <p className="mb-1 font-medium text-slate-600">No rooms yet</p>
-            <p className="text-sm">Create a room to get a code and host dashboard.</p>
+            <p className="text-sm">Enter a name above and click Create room.</p>
           </div>
         ) : (
           <ul className="space-y-3">
@@ -163,9 +256,9 @@ export default function HostDashboard() {
                       </span>
                       <button
                         type="button"
-                        onClick={(e) => handleRemove(r.hostToken, e)}
+                        onClick={(e) => handleRemove(r, e)}
                         className="btn-ghost text-slate-400 hover:text-red-500 p-2"
-                        title="Remove from list"
+                        title="Hide from list"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -176,10 +269,6 @@ export default function HostDashboard() {
             })}
           </ul>
         )}
-
-        <p className="text-xs text-slate-400 mt-8 text-center max-w-md mx-auto">
-          Rooms are saved in this browser. Use the same device to manage them. Each room has a unique code and QR for participants.
-        </p>
       </main>
     </div>
   );
