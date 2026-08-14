@@ -21,6 +21,7 @@ import { connectSocket, emitWithAck, getSocket } from '../services/socket';
 import QuestionForm from '../components/QuestionForm';
 import ResultsChart from '../components/ResultsChart';
 import Leaderboard from '../components/Leaderboard';
+import { upsertHostRoom, updateHostRoom } from '../utils/hostRooms';
 
 export default function HostPage() {
   const { token } = useParams();
@@ -138,6 +139,15 @@ export default function HostPage() {
       connectSocket();
       const res = await emitWithAck('host_join', { hostToken: token });
       setRoom(res.room);
+      if (res.room) {
+        upsertHostRoom({
+          hostToken: token,
+          roomCode: res.room.roomCode || res.room.code,
+          roomId: res.room.id,
+          title: res.room.title,
+          status: res.room.status,
+        });
+      }
       setParticipants(res.participants || []);
       setQuestions(res.questions || []);
       setActiveQuestion(res.activeQuestion || null);
@@ -302,6 +312,7 @@ export default function HostPage() {
       await emitWithAck('end_game');
       await api.endRoom(token);
       setRoom((r) => (r ? { ...r, status: 'ended' } : r));
+      updateHostRoom(token, { status: 'ended' });
     } catch (err) {
       alert(err.message);
     }
@@ -618,6 +629,9 @@ export default function HostPage() {
         <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3 justify-between">
           <div className="flex items-center gap-4">
             <Link to="/" className="font-display font-bold text-brand-700">Fun Game</Link>
+            <Link to="/rooms" className="text-sm text-slate-500 hover:text-brand-600 hidden sm:inline">
+              My rooms
+            </Link>
             <button
               onClick={copyCode}
               className="flex items-center gap-2 bg-brand-50 text-brand-800 font-mono font-bold tracking-widest px-3 py-1.5 rounded-lg text-sm hover:bg-brand-100 transition"
@@ -640,6 +654,9 @@ export default function HostPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <Link to="/rooms" className="btn-secondary text-sm">
+              My rooms
+            </Link>
             <button onClick={() => setPresentMode(true)} className="btn-secondary text-sm">
               <Monitor className="w-4 h-4" /> Present
             </button>
