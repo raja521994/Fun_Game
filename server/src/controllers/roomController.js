@@ -5,7 +5,8 @@ const questionService = require('../services/questionService');
 function createRoom(req, res) {
   try {
     const title = (req.body.title || 'Fun Game Session').toString().slice(0, 100);
-    const room = roomService.createRoom(title);
+    const ownerId = req.user?.id || null;
+    const room = roomService.createRoom(title, ownerId);
     res.status(201).json({
       roomId: room.id,
       roomCode: room.roomCode,
@@ -16,6 +17,19 @@ function createRoom(req, res) {
   } catch (err) {
     console.error('createRoom error:', err);
     res.status(500).json({ error: 'Failed to create room' });
+  }
+}
+
+function listMyRooms(req, res) {
+  try {
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Login required' });
+    }
+    const rooms = roomService.listRoomsByOwner(req.user.id);
+    res.json({ rooms });
+  } catch (err) {
+    console.error('listMyRooms error:', err);
+    res.status(500).json({ error: 'Failed to list rooms' });
   }
 }
 
@@ -57,11 +71,12 @@ function getHostRoom(req, res) {
     const leaderboard = questionService.getLeaderboard(room.id);
 
     res.json({
-      roomId: room.id,
-      roomCode: room.room_code,
-      hostToken: room.host_token,
-      status: room.status,
-      title: room.title,
+      room: {
+        id: room.id,
+        roomCode: room.room_code,
+        status: room.status,
+        title: room.title,
+      },
       participants,
       questions,
       activeQuestion,
@@ -107,6 +122,7 @@ function exportResults(req, res) {
 
 module.exports = {
   createRoom,
+  listMyRooms,
   getRoomByCode,
   getHostRoom,
   endRoom,

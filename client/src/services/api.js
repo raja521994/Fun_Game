@@ -56,6 +56,8 @@ export const api = {
   deleteUser: (userId) =>
     request(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
 
+  listMyRooms: () => request('/rooms/mine'),
+
   createRoom: (title) =>
     request('/rooms', {
       method: 'POST',

@@ -21,6 +21,7 @@ router.delete('/users/:userId', requireAdmin, authController.deleteUser);
 
 // Rooms — create requires login; join stays public
 router.post('/rooms', requireAuth, createRoomLimiter, roomController.createRoom);
+router.get('/rooms/mine', requireAuth, roomController.listMyRooms);
 router.get('/rooms/code/:code', joinLimiter, roomController.getRoomByCode);
 router.get('/rooms/host/:token', roomController.getHostRoom);
 router.post('/rooms/end', roomController.endRoom);

@@ -1,7 +1,7 @@
-const { findOne, insert, update, count } = require('../database/db');
+const { findOne, findMany, insert, update, count } = require('../database/db');
 const { generateRoomCode, generateId, generateToken } = require('../utils/codes');
 
-function createRoom(title = 'Fun Game Session') {
+function createRoom(title = 'Fun Game Session', ownerUserId = null) {
   let roomCode;
   let attempts = 0;
   while (attempts < 20) {
@@ -18,6 +18,7 @@ function createRoom(title = 'Fun Game Session') {
     host_token: generateToken(),
     status: 'waiting',
     title: title || 'Fun Game Session',
+    owner_user_id: ownerUserId || null,
     created_at: new Date().toISOString(),
     ended_at: null,
   };
@@ -28,7 +29,22 @@ function createRoom(title = 'Fun Game Session') {
     hostToken: room.host_token,
     status: room.status,
     title: room.title,
+    ownerUserId: room.owner_user_id,
   };
+}
+
+function listRoomsByOwner(userId) {
+  if (!userId) return [];
+  const rooms = findMany('rooms', (r) => r.owner_user_id === userId);
+  rooms.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  return rooms.map((r) => ({
+    roomId: r.id,
+    roomCode: r.room_code,
+    hostToken: r.host_token,
+    status: r.status,
+    title: r.title,
+    createdAt: r.created_at,
+  }));
 }
 
 function getRoomByCode(roomCode) {
@@ -63,6 +79,7 @@ function getOnlineCount(roomId) {
 
 module.exports = {
   createRoom,
+  listRoomsByOwner,
   getRoomByCode,
   getRoomById,
   getRoomByHostToken,

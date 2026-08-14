@@ -1,8 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Zap, Users, Smartphone, Shield } from 'lucide-react';
-import api from '../services/api';
-import { upsertHostRoom } from '../utils/hostRooms';
 import { isLoggedIn } from '../utils/auth';
 
 export default function HomePage() {
@@ -10,24 +8,12 @@ export default function HomePage() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     if (!isLoggedIn()) {
       navigate('/login', { state: { from: '/rooms' } });
       return;
     }
-    setCreating(true);
-    setError('');
-    try {
-      const room = await api.createRoom('Fun Game Session');
-      upsertHostRoom(room);
-      // Persist host token for reconnect
-      localStorage.setItem(`hostToken:${room.roomCode}`, room.hostToken);
-      localStorage.setItem('lastHostToken', room.hostToken);
-      navigate(`/host/${room.hostToken}`);
-    } catch (err) {
-      setError(err.message || 'Could not create game. Please try again.');
-      setCreating(false);
-    }
+    navigate('/rooms');
   };
 
   return (
@@ -53,10 +39,10 @@ export default function HomePage() {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <button
               onClick={handleCreate}
-              disabled={creating}
+              disabled={false}
               className="btn-accent text-lg px-8 py-4 min-w-[200px] shadow-lg shadow-emerald-900/20"
             >
-              {creating ? 'Creating…' : 'Create Game'}
+              'Create Game'
             </button>
             <button
               onClick={() => navigate('/join')}
