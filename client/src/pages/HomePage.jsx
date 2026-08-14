@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Zap, Users, Smartphone, Shield } from 'lucide-react';
 import api from '../services/api';
 import { upsertHostRoom } from '../utils/hostRooms';
+import { isLoggedIn } from '../utils/auth';
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -10,6 +11,10 @@ export default function HomePage() {
   const [error, setError] = useState('');
 
   const handleCreate = async () => {
+    if (!isLoggedIn()) {
+      navigate('/login', { state: { from: '/rooms' } });
+      return;
+    }
     setCreating(true);
     setError('');
     try {

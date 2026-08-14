@@ -1,3 +1,5 @@
+import { getAuthToken, clearAuth } from '../utils/auth';
+
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 async function request(path, options = {}) {
@@ -6,12 +8,21 @@ async function request(path, options = {}) {
     ...options.headers,
   };
 
+  const token = getAuthToken();
+  if (token && !headers.Authorization) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers,
   });
 
   const data = await res.json().catch(() => ({}));
+
+  if (res.status === 401 && path !== '/auth/login') {
+    clearAuth();
+  }
 
   if (!res.ok) {
     const err = new Error(data.error || res.statusText || 'Request failed');
@@ -24,6 +35,27 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  login: (email, password) =>
+    request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+
+  logout: () => request('/auth/logout', { method: 'POST' }),
+
+  me: () => request('/auth/me'),
+
+  listUsers: () => request('/users'),
+
+  createUser: (data) =>
+    request('/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  deleteUser: (userId) =>
+    request(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+
   createRoom: (title) =>
     request('/rooms', {
       method: 'POST',

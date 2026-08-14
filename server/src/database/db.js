@@ -16,6 +16,8 @@ const DEFAULT_DATA = {
   questions: [],
   options: [],
   answers: [],
+  users: [],
+  sessions: [],
 };
 
 function ensureDir(filePath) {

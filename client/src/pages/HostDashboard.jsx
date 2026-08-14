@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Monitor, Users, Trash2, ArrowRight, Copy, Check, QrCode } from 'lucide-react';
 import api from '../services/api';
-import { loadHostRooms, upsertHostRoom, removeHostRoom, updateHostRoom } from '../utils/hostRooms';
+import { loadHostRooms, upsertHostRoom, removeHostRoom } from '../utils/hostRooms';
+import { isLoggedIn, getAuthUser, clearAuth } from '../utils/auth';
 
 export default function HostDashboard() {
   const navigate = useNavigate();
@@ -15,8 +16,20 @@ export default function HostDashboard() {
   const refresh = () => setRooms(loadHostRooms());
 
   useEffect(() => {
+    if (!isLoggedIn()) {
+      navigate('/login', { state: { from: '/rooms' } });
+      return;
+    }
     refresh();
-  }, []);
+  }, [navigate]);
+
+  const user = getAuthUser();
+
+  const handleLogout = async () => {
+    try { await api.logout(); } catch { /* */ }
+    clearAuth();
+    navigate('/login');
+  };
 
   const handleCreate = async (e) => {
     e?.preventDefault();
@@ -65,7 +78,17 @@ export default function HostDashboard() {
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/" className="font-display font-bold text-brand-700 text-lg">Fun Game</Link>
-          <Link to="/join" className="text-sm text-slate-500 hover:text-brand-600">Join a room</Link>
+          <div className="flex items-center gap-3 text-sm">
+            {user?.role === 'admin' && (
+              <Link to="/users" className="text-slate-500 hover:text-brand-600">Manage users</Link>
+            )}
+            <Link to="/join" className="text-slate-500 hover:text-brand-600">Join a room</Link>
+            {user && (
+              <button type="button" onClick={handleLogout} className="text-slate-400 hover:text-red-500">
+                Log out
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
