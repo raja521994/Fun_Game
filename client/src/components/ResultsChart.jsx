@@ -8,23 +8,21 @@ import {
   Cell,
   PieChart,
   Pie,
-  LabelList,
 } from 'recharts';
 import WordCloud from './WordCloud';
 
-// Bright presentation palette (Mentimeter-style)
 const COLORS = [
   '#3b82f6', // blue
+  '#f472b6', // pink
+  '#1e3a5f', // navy
   '#22c55e', // green
   '#ef4444', // red
   '#fbbf24', // yellow
-  '#f472b6', // pink
   '#a78bfa', // purple
   '#f97316', // orange
-  '#06b6d4', // cyan
 ];
 
-function PieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) {
+function PieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }) {
   if (percent < 0.04) return null;
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.55;
@@ -42,6 +40,83 @@ function PieLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent, name })
     >
       {`${Math.round(percent * 100)}%`}
     </text>
+  );
+}
+
+/** Horizontal Mentimeter-style bars — live width updates via CSS transition */
+function LiveBars({ data, presentMode }) {
+  const max = Math.max(...data.map((d) => d.count), 1);
+  return (
+    <div className={`w-full space-y-4 ${presentMode ? 'py-1' : ''}`}>
+      {data.map((d, i) => {
+        const color = COLORS[i % COLORS.length];
+        const widthPct = max > 0 ? (d.count / max) * 100 : 0;
+        return (
+          <div key={`${d.name}-${i}`} className="w-full">
+            <div className="flex items-center justify-between gap-3 mb-1.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span
+                  className="w-1.5 h-5 rounded-full shrink-0"
+                  style={{ backgroundColor: color }}
+                />
+                <span
+                  className={`font-medium text-slate-700 truncate ${
+                    presentMode ? 'text-base md:text-lg' : 'text-sm'
+                  }`}
+                >
+                  {d.name}
+                </span>
+              </div>
+              <span
+                className={`tabular-nums font-semibold text-slate-500 shrink-0 transition-all duration-300 ${
+                  presentMode ? 'text-sm' : 'text-xs'
+                }`}
+              >
+                {d.count > 0 ? `${d.count} · ${d.percentage}%` : '0'}
+              </span>
+            </div>
+            <div className="h-3.5 md:h-4 rounded-full bg-slate-100 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500 ease-out"
+                style={{
+                  width: `${d.count > 0 ? Math.max(widthPct, 3) : 0}%`,
+                  backgroundColor: color,
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Vertical colorful bars (present / multi-option) */
+function VerticalBars({ data, presentMode }) {
+  return (
+    <div className="w-full" style={{ height: presentMode ? 240 : 200 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={data} margin={{ top: 24, right: 8, left: 0, bottom: 8 }}>
+          <XAxis
+            dataKey="name"
+            interval={0}
+            tick={{ fontSize: presentMode ? 12 : 11, fill: '#475569' }}
+            angle={data.length > 4 ? -20 : 0}
+            textAnchor={data.length > 4 ? 'end' : 'middle'}
+            height={data.length > 4 ? 50 : 30}
+          />
+          <YAxis allowDecimals={false} hide />
+          <Tooltip
+            formatter={(v, _n, props) => [`${v} (${props.payload.percentage}%)`, 'Votes']}
+          />
+          <Bar dataKey="count" radius={[8, 8, 0, 0]} maxBarSize={72} isAnimationActive animationDuration={400}>
+            {data.map((_, i) => (
+              <Cell key={i} fill={COLORS[i % COLORS.length]} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
@@ -88,35 +163,34 @@ export default function ResultsChart({ results, presentMode = false }) {
     percentage: o.percentage || 0,
   }));
 
-  // Pie for yes/no or few options in present mode
-  const hasVotes = data.some((d) => d.count > 0);
-  const usePie =
-    presentMode &&
-    hasVotes &&
-    (type === 'yes_no' || (type === 'multiple_choice' && data.length > 0 && data.length <= 6));
+  if (!data.length) {
+    return <p className="text-center text-slate-400 py-8">No options</p>;
+  }
 
-  if (usePie) {
-    const chartData = data;
-    return (
-      <div className="w-full">
-        <div className="w-full h-full min-h-[200px] max-h-[min(360px,50vh)]">
-          <ResponsiveContainer width="100%" height="100%">
+  // —— YES / NO only: pie chart when there are votes ——
+  if (type === 'yes_no') {
+    const hasVotes = data.some((d) => d.count > 0);
+    if (hasVotes) {
+      return (
+        <div className="w-full">
+          <ResponsiveContainer width="100%" height={presentMode ? 260 : 220}>
             <PieChart>
               <Pie
-                data={chartData}
+                data={data}
                 dataKey="count"
                 nameKey="name"
                 cx="50%"
                 cy="50%"
                 outerRadius={presentMode ? 110 : 90}
-                innerRadius={0}
-                paddingAngle={1}
+                paddingAngle={2}
                 stroke="#fff"
                 strokeWidth={3}
                 label={PieLabel}
                 labelLine={false}
+                isAnimationActive
+                animationDuration={400}
               >
-                {chartData.map((_, i) => (
+                {data.map((_, i) => (
                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                 ))}
               </Pie>
@@ -128,92 +202,75 @@ export default function ResultsChart({ results, presentMode = false }) {
               />
             </PieChart>
           </ResponsiveContainer>
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-1">
+            {data.map((d, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                />
+                <span className="text-slate-700 font-medium">{d.name}</span>
+                <span className="text-slate-400 tabular-nums">
+                  {d.count} · {d.percentage}%
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-        {/* External legend like Mentimeter callouts */}
-        <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-2 px-2">
+      );
+    }
+    // Zero votes: show empty tracks for Yes / No
+    return <LiveBars data={data} presentMode={presentMode} />;
+  }
+
+  // —— Rating ——
+  if (type === 'rating') {
+    return (
+      <div className="w-full">
+        {average != null && (
+          <div className="text-center mb-4">
+            <div className={`font-display font-bold text-brand-600 ${presentMode ? 'text-5xl' : 'text-3xl'}`}>
+              {Number(average).toFixed(1)}
+            </div>
+            <p className="text-slate-500 text-sm">
+              Average · {totalAnswers} response{totalAnswers !== 1 ? 's' : ''}
+            </p>
+          </div>
+        )}
+        <LiveBars data={data} presentMode={presentMode} />
+      </div>
+    );
+  }
+
+  // —— Multiple choice & everything else: colorful bars only (never pie) ——
+  // Present: vertical bars when few options look good; else horizontal live bars
+  if (presentMode && data.length <= 6) {
+    return (
+      <div className="w-full">
+        <VerticalBars data={data} presentMode />
+        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2">
           {data.map((d, i) => (
-            <div key={i} className="flex items-center gap-2 text-sm">
+            <span key={i} className="text-xs text-slate-500 tabular-nums">
               <span
-                className="w-3 h-3 rounded-full shrink-0"
+                className="inline-block w-2 h-2 rounded-full mr-1 align-middle"
                 style={{ backgroundColor: COLORS[i % COLORS.length] }}
               />
-              <span className="text-slate-700 font-medium">{d.name}</span>
-              <span className="text-slate-400">{d.percentage}%</span>
-            </div>
+              {d.name}: {d.count}
+            </span>
           ))}
         </div>
       </div>
     );
   }
 
-  // Vertical bars with count on top (Mentimeter bar style)
-  if (presentMode) {
-    return (
-      <div className="w-full">
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart
-            data={data}
-            margin={{ top: 24, right: 12, left: 4, bottom: 36 }}
-          >
-            <XAxis
-              dataKey="name"
-              interval={0}
-              tick={{ fontSize: 12, fill: '#475569' }}
-              angle={data.length > 5 ? -25 : 0}
-              textAnchor={data.length > 5 ? 'end' : 'middle'}
-              height={data.length > 5 ? 60 : 40}
-            />
-            <YAxis allowDecimals={false} hide />
-            <Tooltip
-              formatter={(v, _n, props) => [
-                `${v} (${props.payload.percentage}%)`,
-                'Votes',
-              ]}
-            />
-            <Bar dataKey="count" radius={[8, 8, 0, 0]} maxBarSize={72}>
-              {data.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
-              ))}
-              <LabelList
-                dataKey="count"
-                position="top"
-                style={{ fill: '#0f172a', fontWeight: 700, fontSize: 14 }}
-              />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    );
-  }
-
-  // Dashboard (non-present): horizontal bars
   return (
-    <div>
-      <p className="text-sm text-slate-500 mb-4 text-center">
-        {totalAnswers} response{totalAnswers !== 1 ? 's' : ''}
-        {type === 'rating' && average != null && ` · Avg ${average}`}
-      </p>
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart
-          data={data}
-          layout="vertical"
-          margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
-        >
-          <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12 }} />
-          <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 13 }} />
-          <Tooltip
-            formatter={(v, _n, props) => [
-              `${v} (${props.payload.percentage}%)`,
-              'Votes',
-            ]}
-          />
-          <Bar dataKey="count" radius={[0, 8, 8, 0]} barSize={22}>
-            {data.map((_, i) => (
-              <Cell key={i} fill={COLORS[i % COLORS.length]} />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
+    <div className="w-full">
+      {!presentMode && (
+        <p className="text-sm text-slate-500 mb-4 text-center">
+          {totalAnswers} response{totalAnswers !== 1 ? 's' : ''}
+        </p>
+      )}
+      <LiveBars data={data} presentMode={presentMode} />
     </div>
   );
 }

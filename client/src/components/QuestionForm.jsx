@@ -19,22 +19,34 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
   const [correctIndex, setCorrectIndex] = useState(0);
   const [timerSeconds, setTimerSeconds] = useState(0);
 
+  const canBeQuiz = type === 'multiple_choice' || type === 'yes_no';
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!questionText.trim()) return;
 
+    const quizOn = canBeQuiz && isQuiz;
+
     const payload = {
       type,
       questionText: questionText.trim(),
-      isQuiz: type === 'multiple_choice' ? isQuiz : false,
-      correctOptionIndex: type === 'multiple_choice' && isQuiz ? correctIndex : null,
-      timerSeconds: isQuiz || timerSeconds > 0 ? timerSeconds : 0,
+      isQuiz: quizOn,
+      correctOptionIndex: quizOn ? correctIndex : null,
+      timerSeconds: quizOn || timerSeconds > 0 ? timerSeconds : 0,
     };
 
     if (type === 'multiple_choice') {
       const clean = options.map((o) => o.trim()).filter(Boolean);
       if (clean.length < 2) return;
       payload.options = clean;
+      if (quizOn && (correctIndex < 0 || correctIndex >= clean.length)) {
+        payload.correctOptionIndex = 0;
+      }
+    }
+
+    // yes_no: server creates Yes (0) / No (1); correctOptionIndex selects which is right
+    if (type === 'yes_no' && quizOn) {
+      payload.correctOptionIndex = correctIndex === 1 ? 1 : 0;
     }
 
     onSubmit(payload);
@@ -71,7 +83,8 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
               type="button"
               onClick={() => {
                 setType(t.value);
-                if (t.value !== 'multiple_choice') setIsQuiz(false);
+                if (t.value !== 'multiple_choice' && t.value !== 'yes_no') setIsQuiz(false);
+                if (t.value === 'yes_no') setCorrectIndex(0);
               }}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                 type === t.value
@@ -86,15 +99,13 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
       </div>
 
       <div>
-        <label className="label" htmlFor="qtext">
-          Question
-        </label>
+        <label className="label">Question</label>
         <textarea
-          id="qtext"
           className="input min-h-[80px] resize-y"
+          placeholder="What do you want to ask?"
           value={questionText}
-          onChange={(e) => setQuestionText(e.target.value.slice(0, 500))}
-          placeholder="Enter your question…"
+          onChange={(e) => setQuestionText(e.target.value)}
+          maxLength={500}
           required
         />
       </div>
@@ -104,31 +115,37 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
           <label className="label">Options</label>
           <div className="space-y-2">
             {options.map((opt, i) => (
-              <div key={i} className="flex gap-2 items-center">
+              <div key={i} className="flex items-center gap-2">
                 {isQuiz && (
-                  <input
-                    type="radio"
-                    name="correct"
-                    checked={correctIndex === i}
-                    onChange={() => setCorrectIndex(i)}
-                    title="Mark as correct"
-                    className="accent-brand-600"
-                  />
+                  <button
+                    type="button"
+                    title="Mark as correct answer"
+                    onClick={() => setCorrectIndex(i)}
+                    className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                      correctIndex === i
+                        ? 'border-accent-500 bg-accent-500'
+                        : 'border-slate-300 hover:border-accent-400'
+                    }`}
+                  >
+                    {correctIndex === i && (
+                      <span className="w-2 h-2 rounded-full bg-white" />
+                    )}
+                  </button>
                 )}
                 <input
                   className="input flex-1"
+                  placeholder={`Option ${i + 1}`}
                   value={opt}
                   onChange={(e) => {
                     const next = [...options];
-                    next[i] = e.target.value.slice(0, 200);
+                    next[i] = e.target.value;
                     setOptions(next);
                   }}
-                  placeholder={`Option ${i + 1}`}
                 />
                 <button
                   type="button"
                   onClick={() => removeOption(i)}
-                  className="btn-ghost text-red-500 p-2"
+                  className="btn-ghost p-2 text-slate-400 hover:text-red-500"
                   disabled={options.length <= 2}
                 >
                   <Trash2 className="w-4 h-4" />
@@ -141,44 +158,104 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
               <Plus className="w-4 h-4" /> Add option
             </button>
           )}
-
-          <label className="flex items-center gap-2 mt-4 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isQuiz}
-              onChange={(e) => setIsQuiz(e.target.checked)}
-              className="accent-brand-600 rounded"
-            />
-            <span className="text-sm font-medium text-slate-700">Quiz mode (track scores)</span>
-          </label>
+          {isQuiz && (
+            <p className="text-xs text-slate-500 mt-2">
+              Click the circle next to an option to mark the correct answer
+            </p>
+          )}
         </div>
       )}
 
-      {(isQuiz || type === 'multiple_choice') && (
+      {type === 'yes_no' && (
         <div>
-          <label className="label">Timer (optional)</label>
-          <div className="flex flex-wrap gap-2">
-            {TIMERS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTimerSeconds(t)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
-                  timerSeconds === t
-                    ? 'bg-brand-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          <label className="label">Answers</label>
+          <div className="space-y-2">
+            {['Yes', 'No'].map((label, i) => (
+              <div
+                key={label}
+                className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
+                  isQuiz && correctIndex === i
+                    ? 'border-accent-500 bg-accent-500/5'
+                    : 'border-slate-200 bg-slate-50'
                 }`}
               >
-                {t === 0 ? 'None' : `${t}s`}
-              </button>
+                {isQuiz ? (
+                  <button
+                    type="button"
+                    title={`Mark "${label}" as correct`}
+                    onClick={() => setCorrectIndex(i)}
+                    className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                      correctIndex === i
+                        ? 'border-accent-500 bg-accent-500'
+                        : 'border-slate-300 hover:border-accent-400'
+                    }`}
+                  >
+                    {correctIndex === i && (
+                      <span className="w-2 h-2 rounded-full bg-white" />
+                    )}
+                  </button>
+                ) : (
+                  <span
+                    className="w-1.5 h-8 rounded-full shrink-0"
+                    style={{ backgroundColor: i === 0 ? '#22c55e' : '#ef4444' }}
+                  />
+                )}
+                <span className="font-medium text-slate-800">{label}</span>
+                {isQuiz && correctIndex === i && (
+                  <span className="ml-auto text-xs font-semibold text-accent-600">Correct</span>
+                )}
+              </div>
             ))}
           </div>
+          {isQuiz ? (
+            <p className="text-xs text-slate-500 mt-2">
+              Select Yes or No as the correct answer (not defaulted — you choose)
+            </p>
+          ) : (
+            <p className="text-xs text-slate-500 mt-2">
+              Enable Quiz mode below if this has a correct Yes/No answer
+            </p>
+          )}
         </div>
       )}
 
-      <div className="flex gap-3 pt-2">
-        <button type="submit" disabled={loading} className="btn-primary flex-1">
-          {loading ? 'Adding…' : 'Add Question'}
+      {canBeQuiz && (
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={isQuiz}
+            onChange={(e) => setIsQuiz(e.target.checked)}
+            className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+          />
+          <span className="text-sm font-medium text-slate-700">
+            Quiz mode (score correct answers)
+          </span>
+        </label>
+      )}
+
+      <div>
+        <label className="label">Timer (seconds)</label>
+        <div className="flex flex-wrap gap-2">
+          {TIMERS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTimerSeconds(t)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium ${
+                timerSeconds === t
+                  ? 'bg-brand-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {t === 0 ? 'None' : `${t}s`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex gap-2 pt-2">
+        <button type="submit" className="btn-primary flex-1" disabled={loading}>
+          {loading ? 'Saving…' : 'Add question'}
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel} className="btn-secondary">
