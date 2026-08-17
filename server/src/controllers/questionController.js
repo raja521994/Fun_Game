@@ -20,7 +20,7 @@ function requireHost(req) {
 function createQuestion(req, res) {
   try {
     const room = requireHost(req);
-    const { type, questionText, options, isQuiz, correctOptionIndex, timerSeconds } = req.body;
+    const { type, questionText, options, isQuiz, correctOptionIndex, timerSeconds, revealAtEnd } = req.body;
 
     const question = questionService.createQuestion(room.id, {
       type,
@@ -29,6 +29,7 @@ function createQuestion(req, res) {
       isQuiz: !!isQuiz,
       correctOptionIndex: correctOptionIndex != null ? Number(correctOptionIndex) : null,
       timerSeconds: timerSeconds ? Number(timerSeconds) : 0,
+      revealAtEnd: !!revealAtEnd,
     });
 
     res.status(201).json(question);

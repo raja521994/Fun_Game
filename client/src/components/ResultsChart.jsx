@@ -224,7 +224,7 @@ export default function ResultsChart({ results, presentMode = false }) {
   }
 
   // —— Rating ——
-  if (type === 'rating') {
+  if (type === 'rating' || type === 'feedback') {
     return (
       <div className="w-full">
         {average != null && (

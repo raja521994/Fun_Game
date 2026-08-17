@@ -2,7 +2,7 @@ const { findOne, findMany, insert, update, remove } = require('../database/db');
 const { generateId } = require('../utils/codes');
 const { calculateScore } = require('../utils/scoring');
 
-const VALID_TYPES = ['multiple_choice', 'word_cloud', 'rating', 'yes_no', 'open_text'];
+const VALID_TYPES = ['multiple_choice', 'word_cloud', 'rating', 'feedback', 'yes_no', 'open_text'];
 
 function createQuestion(roomId, data) {
   const {
@@ -12,6 +12,7 @@ function createQuestion(roomId, data) {
     isQuiz = false,
     correctOptionIndex = null,
     timerSeconds = 0,
+    revealAtEnd = false,
   } = data;
 
   if (!VALID_TYPES.includes(type)) throw new Error('Invalid question type: ' + type);
@@ -34,6 +35,7 @@ function createQuestion(roomId, data) {
     is_quiz: isQuiz ? 1 : 0,
     correct_option_id: null,
     timer_seconds: timerSeconds || 0,
+    reveal_at_end: isQuiz && revealAtEnd ? 1 : 0,
     status: 'draft',
     created_at: new Date().toISOString(),
   });
@@ -58,7 +60,7 @@ function createQuestion(roomId, data) {
     if (correctOptionId) update('questions', (q) => q.id === id, { correct_option_id: correctOptionId });
   }
 
-  if (type === 'rating') {
+  if (type === 'rating' || type === 'feedback') {
     for (let i = 1; i <= 5; i++) {
       insert('options', {
         id: generateId(),
@@ -129,7 +131,7 @@ function submitAnswer({ questionId, participantId, answerText, optionId, respons
   let finalOptionId = optionId || null;
   let finalText = answerText ? String(answerText).trim().slice(0, 200) : null;
 
-  if (q.type === 'multiple_choice' || q.type === 'yes_no' || q.type === 'rating') {
+  if (q.type === 'multiple_choice' || q.type === 'yes_no' || q.type === 'rating' || q.type === 'feedback') {
     if (!optionId) throw new Error('Option is required');
     const opt = q.options.find((o) => o.id === optionId);
     if (!opt) throw new Error('Invalid option');
@@ -169,13 +171,13 @@ function getResults(questionId) {
     .sort((a, b) => (a.submitted_at || '').localeCompare(b.submitted_at || ''));
   const total = answers.length;
 
-  if (q.type === 'multiple_choice' || q.type === 'yes_no' || q.type === 'rating') {
+  if (q.type === 'multiple_choice' || q.type === 'yes_no' || q.type === 'rating' || q.type === 'feedback') {
     const counts = {};
     q.options.forEach((o) => { counts[o.id] = { optionId: o.id, text: o.option_text, count: 0, percentage: 0 }; });
     answers.forEach((a) => { if (a.option_id && counts[a.option_id]) counts[a.option_id].count++; });
     Object.values(counts).forEach((c) => { c.percentage = total > 0 ? Math.round((c.count / total) * 1000) / 10 : 0; });
     let average = null;
-    if (q.type === 'rating' && total > 0) {
+    if ((q.type === 'rating' || q.type === 'feedback') && total > 0) {
       const sum = answers.reduce((acc, a) => acc + (parseInt(a.answer_text, 10) || 0), 0);
       average = Math.round((sum / total) * 10) / 10;
     }

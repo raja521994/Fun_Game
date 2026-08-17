@@ -389,7 +389,11 @@ export default function HostPage() {
     })();
 
     const quizQuestions = questions.filter(
-      (q) => q.is_quiz && q.correct_option_id && (q.options || []).length
+      (q) =>
+        q.is_quiz &&
+        q.correct_option_id &&
+        (q.options || []).length &&
+        (q.reveal_at_end === 1 || q.reveal_at_end === true)
     );
 
     const broadcastReview = (idx) => {
@@ -842,7 +846,7 @@ export default function HostPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-xs text-slate-400 capitalize mb-0.5">
-                      {q.type.replace('_', ' ')}{q.is_quiz ? ' · Quiz' : ''}
+                      {q.type.replace('_', ' ')}{q.is_quiz ? ' · Quiz' : ''}{q.reveal_at_end ? ' · Reveal' : ''}
                     </p>
                     <p className="text-sm font-medium text-slate-800 truncate">{q.question_text}</p>
                   </div>

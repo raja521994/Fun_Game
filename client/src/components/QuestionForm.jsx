@@ -5,6 +5,7 @@ const TYPES = [
   { value: 'multiple_choice', label: 'Multiple Choice' },
   { value: 'yes_no', label: 'Yes / No' },
   { value: 'rating', label: 'Rating (1–5)' },
+  { value: 'feedback', label: 'Feedback (1–5)' },
   { value: 'word_cloud', label: 'Word Cloud' },
   { value: 'open_text', label: 'Open Text' },
 ];
@@ -16,6 +17,7 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
   const [questionText, setQuestionText] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isQuiz, setIsQuiz] = useState(false);
+  const [revealAtEnd, setRevealAtEnd] = useState(true);
   const [correctIndex, setCorrectIndex] = useState(0);
   const [timerSeconds, setTimerSeconds] = useState(0);
 
@@ -33,6 +35,7 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
       isQuiz: quizOn,
       correctOptionIndex: quizOn ? correctIndex : null,
       timerSeconds: quizOn || timerSeconds > 0 ? timerSeconds : 0,
+      revealAtEnd: quizOn ? revealAtEnd : false,
     };
 
     if (type === 'multiple_choice') {
@@ -44,7 +47,6 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
       }
     }
 
-    // yes_no: server creates Yes (0) / No (1); correctOptionIndex selects which is right
     if (type === 'yes_no' && quizOn) {
       payload.correctOptionIndex = correctIndex === 1 ? 1 : 0;
     }
@@ -83,7 +85,10 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
               type="button"
               onClick={() => {
                 setType(t.value);
-                if (t.value !== 'multiple_choice' && t.value !== 'yes_no') setIsQuiz(false);
+                if (t.value !== 'multiple_choice' && t.value !== 'yes_no') {
+                  setIsQuiz(false);
+                  setRevealAtEnd(false);
+                }
                 if (t.value === 'yes_no') setCorrectIndex(0);
               }}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
@@ -102,13 +107,24 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
         <label className="label">Question</label>
         <textarea
           className="input min-h-[80px] resize-y"
-          placeholder="What do you want to ask?"
+          placeholder={
+            type === 'feedback'
+              ? 'e.g. How would you rate this session overall?'
+              : 'What do you want to ask?'
+          }
           value={questionText}
           onChange={(e) => setQuestionText(e.target.value)}
           maxLength={500}
           required
         />
       </div>
+
+      {(type === 'rating' || type === 'feedback') && (
+        <div className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 text-sm text-slate-600">
+          Participants pick a score from <strong>1</strong> to <strong>5</strong>
+          {type === 'feedback' ? ' (feedback collection — no right/wrong).' : '.'}
+        </div>
+      )}
 
       {type === 'multiple_choice' && (
         <div>
@@ -127,9 +143,7 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
                         : 'border-slate-300 hover:border-accent-400'
                     }`}
                   >
-                    {correctIndex === i && (
-                      <span className="w-2 h-2 rounded-full bg-white" />
-                    )}
+                    {correctIndex === i && <span className="w-2 h-2 rounded-full bg-white" />}
                   </button>
                 )}
                 <input
@@ -158,11 +172,6 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
               <Plus className="w-4 h-4" /> Add option
             </button>
           )}
-          {isQuiz && (
-            <p className="text-xs text-slate-500 mt-2">
-              Click the circle next to an option to mark the correct answer
-            </p>
-          )}
         </div>
       )}
 
@@ -190,9 +199,7 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
                         : 'border-slate-300 hover:border-accent-400'
                     }`}
                   >
-                    {correctIndex === i && (
-                      <span className="w-2 h-2 rounded-full bg-white" />
-                    )}
+                    {correctIndex === i && <span className="w-2 h-2 rounded-full bg-white" />}
                   </button>
                 ) : (
                   <span
@@ -207,30 +214,48 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
               </div>
             ))}
           </div>
-          {isQuiz ? (
-            <p className="text-xs text-slate-500 mt-2">
-              Select Yes or No as the correct answer (not defaulted — you choose)
-            </p>
-          ) : (
-            <p className="text-xs text-slate-500 mt-2">
-              Enable Quiz mode below if this has a correct Yes/No answer
-            </p>
-          )}
         </div>
       )}
 
       {canBeQuiz && (
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isQuiz}
-            onChange={(e) => setIsQuiz(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
-          />
-          <span className="text-sm font-medium text-slate-700">
-            Quiz mode (score correct answers)
-          </span>
-        </label>
+        <div className="space-y-3 rounded-xl border border-slate-200 p-4 bg-slate-50/80">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isQuiz}
+              onChange={(e) => {
+                setIsQuiz(e.target.checked);
+                if (!e.target.checked) setRevealAtEnd(false);
+                else setRevealAtEnd(true);
+              }}
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            />
+            <span>
+              <span className="text-sm font-medium text-slate-800 block">Quiz mode</span>
+              <span className="text-xs text-slate-500">Score correct answers on the leaderboard</span>
+            </span>
+          </label>
+
+          {isQuiz && (
+            <label className="flex items-start gap-3 cursor-pointer pl-0 sm:pl-1">
+              <input
+                type="checkbox"
+                checked={revealAtEnd}
+                onChange={(e) => setRevealAtEnd(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+              />
+              <span>
+                <span className="text-sm font-medium text-slate-800 block">
+                  Reveal correct answer at the end
+                </span>
+                <span className="text-xs text-slate-500">
+                  If enabled, this answer is shown one-by-one after final scores. If none are enabled,
+                  the game ends after scores are revealed.
+                </span>
+              </span>
+            </label>
+          )}
+        </div>
       )}
 
       <div>
