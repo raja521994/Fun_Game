@@ -1,4 +1,4 @@
-const { findOne, findMany, insert, update, count } = require('../database/db');
+const { findOne, findMany, insert, update, count, remove } = require('../database/db');
 const { generateRoomCode, generateId, generateToken } = require('../utils/codes');
 
 function createRoom(title = 'Fun Game Session', ownerUserId = null) {
@@ -77,6 +77,41 @@ function getOnlineCount(roomId) {
   return count('participants', (p) => p.room_id === roomId && p.is_online === 1);
 }
 
+function deleteRoom(roomId, ownerUserId) {
+  const room = getRoomById(roomId);
+  if (!room) {
+    const err = new Error('Room not found');
+    err.status = 404;
+    throw err;
+  }
+  // Only owner can delete (or if no owner set, allow host token path via controller)
+  if (ownerUserId && room.owner_user_id && room.owner_user_id !== ownerUserId) {
+    const err = new Error('You can only delete your own rooms');
+    err.status = 403;
+    throw err;
+  }
+
+  const questionIds = findMany('questions', (q) => q.room_id === roomId).map((q) => q.id);
+  if (questionIds.length) {
+    remove('options', (o) => questionIds.includes(o.question_id));
+    remove('answers', (a) => questionIds.includes(a.question_id));
+    remove('questions', (q) => q.room_id === roomId);
+  }
+  remove('participants', (p) => p.room_id === roomId);
+  remove('rooms', (r) => r.id === roomId);
+  return true;
+}
+
+function deleteRoomByHostToken(hostToken, ownerUserId) {
+  const room = getRoomByHostToken(hostToken);
+  if (!room) {
+    const err = new Error('Room not found');
+    err.status = 404;
+    throw err;
+  }
+  return deleteRoom(room.id, ownerUserId);
+}
+
 module.exports = {
   createRoom,
   listRoomsByOwner,
@@ -86,4 +121,6 @@ module.exports = {
   updateRoomStatus,
   getParticipantCount,
   getOnlineCount,
+  deleteRoom,
+  deleteRoomByHostToken,
 };

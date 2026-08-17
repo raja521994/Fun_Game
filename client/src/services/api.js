@@ -58,6 +58,14 @@ export const api = {
 
   listMyRooms: () => request('/rooms/mine'),
 
+  deleteRoom: ({ roomId, hostToken }) =>
+    roomId
+      ? request(`/rooms/${encodeURIComponent(roomId)}`, { method: 'DELETE' })
+      : request('/rooms/delete', {
+          method: 'POST',
+          body: JSON.stringify({ hostToken }),
+        }),
+
   createRoom: (title) =>
     request('/rooms', {
       method: 'POST',

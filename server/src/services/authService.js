@@ -11,7 +11,14 @@ function normalizeEmail(email) {
 
 async function ensureRootAdmin() {
   const existing = findOne('users', (u) => normalizeEmail(u.email) === normalizeEmail(ROOT_EMAIL));
-  if (existing) return existing;
+  if (existing) {
+    // Always keep root as admin
+    if (existing.role !== 'admin') {
+      update('users', (u) => u.id === existing.id, { role: 'admin' });
+      existing.role = 'admin';
+    }
+    return existing;
+  }
 
   const passwordHash = await hashPassword(ROOT_PASSWORD);
   const user = {
@@ -28,14 +35,20 @@ async function ensureRootAdmin() {
   return user;
 }
 
+function isRootEmail(email) {
+  return normalizeEmail(email) === normalizeEmail(ROOT_EMAIL);
+}
+
 function publicUser(u) {
   if (!u) return null;
+  const root = isRootEmail(u.email);
   return {
     id: u.id,
     email: u.email,
-    role: u.role,
+    role: root ? 'admin' : u.role,
     name: u.name || u.email,
     createdAt: u.created_at,
+    isRoot: root,
   };
 }
 
@@ -144,9 +157,9 @@ function deleteUser(userId, actor) {
     err.status = 404;
     throw err;
   }
-  if (normalizeEmail(target.email) === normalizeEmail(ROOT_EMAIL)) {
-    const err = new Error('Cannot delete the root admin');
-    err.status = 400;
+  if (isRootEmail(target.email)) {
+    const err = new Error('The root admin cannot be deleted');
+    err.status = 403;
     throw err;
   }
   if (target.id === actor.id) {
@@ -168,5 +181,6 @@ module.exports = {
   listUsers,
   deleteUser,
   publicUser,
+  isRootEmail,
   ROOT_EMAIL,
 };

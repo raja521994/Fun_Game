@@ -19,6 +19,7 @@ export default function ParticipantPage() {
   const [timerLeft, setTimerLeft] = useState(null);
   const [scoreInfo, setScoreInfo] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [answerReview, setAnswerReview] = useState(null);
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -70,20 +71,29 @@ export default function ParticipantPage() {
       setStatus((s) => (s === 'active' || s === 'answered' ? 'waiting' : s));
     };
 
-    const onPresentPhase = ({ phase, leaderboard: lb }) => {
+    const onPresentPhase = ({ phase, leaderboard: lb, review }) => {
       if (lb) setLeaderboard(lb);
       if (phase === 'between') {
+        setAnswerReview(null);
         setStatus('between');
         setTimerLeft(null);
       } else if (phase === 'ready_results') {
+        setAnswerReview(null);
         setStatus('ready_results');
         setTimerLeft(null);
       } else if (phase === 'final_scores') {
+        setAnswerReview(null);
         setStatus('final_scores');
         setTimerLeft(null);
+      } else if (phase === 'answer_review') {
+        setAnswerReview(review || null);
+        setStatus('answer_review');
+        setTimerLeft(null);
       } else if (phase === 'live') {
+        setAnswerReview(null);
         // question_started will usually follow
       } else if (phase === 'waiting') {
+        setAnswerReview(null);
         setStatus('waiting');
       }
     };
@@ -231,6 +241,56 @@ export default function ParticipantPage() {
           )}
         </div>
         <p className="text-center text-white/40 text-xs mt-6">Thanks for playing, {name}!</p>
+      </div>
+    );
+  }
+
+  // Correct answer reveal (synced with host)
+  if (status === 'answer_review' && answerReview) {
+    const r = answerReview;
+    return (
+      <div className="flex-1 flex flex-col bg-slate-900 text-white min-h-dvh px-4 py-8">
+        <p className="text-center text-white/40 text-[10px] uppercase tracking-widest mb-3">
+          Answer key · {(r.index ?? 0) + 1} of {r.total || '?'}
+        </p>
+        <div className="w-full max-w-md mx-auto bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-3xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-5 py-4 text-white">
+            <p className="text-xs uppercase tracking-wider text-white/70 mb-1">Question</p>
+            <h2 className="font-display text-lg font-bold leading-snug">{r.questionText}</h2>
+          </div>
+          <div className="p-5 space-y-2.5">
+            {(r.options || []).map((o, i) => (
+              <div
+                key={i}
+                className={`flex items-center gap-3 rounded-2xl px-3.5 py-3 border-2 ${
+                  o.isCorrect
+                    ? 'border-emerald-500 bg-emerald-50'
+                    : 'border-slate-100 bg-slate-50 opacity-60'
+                }`}
+              >
+                <span
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                    o.isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'
+                  }`}
+                >
+                  {o.isCorrect ? '✓' : String.fromCharCode(65 + i)}
+                </span>
+                <span className={`flex-1 text-sm font-medium ${o.isCorrect ? 'text-emerald-900' : 'text-slate-600'}`}>
+                  {o.text}
+                </span>
+                {o.isCorrect && (
+                  <span className="text-[10px] font-bold uppercase text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                    Correct
+                  </span>
+                )}
+              </div>
+            ))}
+            <div className="pt-3 text-center border-t border-slate-100 mt-2">
+              <p className="text-xs text-slate-500">The correct answer is</p>
+              <p className="font-display text-xl font-bold text-emerald-600 mt-1">{r.correctText}</p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
