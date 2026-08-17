@@ -230,6 +230,52 @@ function deleteQuestion(questionId) {
   remove('questions', (q) => q.id === questionId);
 }
 
+function exportExcel(roomId) {
+  const XLSX = require('xlsx');
+  const questions = getQuestionsByRoom(roomId);
+  const participants = findMany('participants', (p) => p.room_id === roomId);
+  const pMap = Object.fromEntries(participants.map((p) => [p.id, p]));
+
+  const resultRows = [
+    ['Question', 'Type', 'Order', 'Participant', 'Answer', 'Correct', 'Score', 'Submitted at'],
+  ];
+  const feedbackRows = [
+    ['Feedback question', 'Order', 'Participant', 'Rating (1-5)', 'Submitted at'],
+  ];
+
+  for (const q of questions) {
+    const answers = findMany('answers', (a) => a.question_id === q.id);
+    for (const a of answers) {
+      const p = pMap[a.participant_id];
+      if (q.type === 'feedback') {
+        feedbackRows.push([
+          q.question_text,
+          q.order_number,
+          p?.name || '',
+          a.answer_text || '',
+          a.submitted_at || '',
+        ]);
+      } else {
+        resultRows.push([
+          q.question_text,
+          q.type,
+          q.order_number,
+          p?.name || '',
+          a.answer_text || '',
+          a.is_correct == null ? '' : a.is_correct ? 'Yes' : 'No',
+          a.score ?? '',
+          a.submitted_at || '',
+        ]);
+      }
+    }
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(resultRows), 'Results');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(feedbackRows), 'Feedback');
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+}
+
 function exportCsv(roomId) {
   const questions = findMany('questions', (q) => q.room_id === roomId).sort((a, b) => a.order_number - b.order_number);
   const rows = [];
@@ -250,5 +296,5 @@ function exportCsv(roomId) {
 
 module.exports = {
   createQuestion, getQuestionById, getQuestionsByRoom, getActiveQuestion, startQuestion, stopQuestion,
-  setResultsStatus, submitAnswer, getResults, getLeaderboard, deleteQuestion, exportCsv, VALID_TYPES,
+  setResultsStatus, submitAnswer, getResults, getLeaderboard, deleteQuestion, exportCsv, exportExcel, VALID_TYPES,
 };

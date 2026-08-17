@@ -295,6 +295,14 @@ function registerSocketHandlers(io) {
         if (phase === 'answer_review' && review) {
           payload.review = review;
         }
+        if (phase === 'feedback') {
+          const qs = questionService.getQuestionsByRoom(roomId).filter((q) => q.type === 'feedback');
+          payload.feedbackQuestions = qs.map((q) => ({
+            id: q.id,
+            questionText: q.question_text,
+            options: (q.options || []).map((o) => ({ id: o.id, text: o.option_text })),
+          }));
+        }
         io.to(`room:${roomId}`).emit('present_phase', payload);
         callback?.({ success: true });
       } catch (err) {

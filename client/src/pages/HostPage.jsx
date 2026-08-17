@@ -44,6 +44,7 @@ export default function HostPage() {
   const [readyForResults, setReadyForResults] = useState(false);
   const [answerReview, setAnswerReview] = useState(false);
   const [reviewIndex, setReviewIndex] = useState(0);
+  const [feedbackPhase, setFeedbackPhase] = useState(false);
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
   const [timerLeft, setTimerLeft] = useState(null);
@@ -73,7 +74,7 @@ export default function HostPage() {
   }, []);
 
   const startQuestionByIndex = useCallback(async (index) => {
-    const list = questionsRef.current;
+    const list = questionsRef.current.filter((q) => q.type !== 'feedback');
     const q = list[index];
     if (!q) return;
     try {
@@ -104,7 +105,7 @@ export default function HostPage() {
       }
 
       const idx = currentIndexRef.current;
-      const list = questionsRef.current;
+      const list = questionsRef.current.filter((q) => q.type !== 'feedback');
       const nextIdx = idx + 1;
 
       setActiveQuestion((q) => (q ? { ...q, status: 'stopped', is_active: 0 } : q));
@@ -265,7 +266,7 @@ export default function HostPage() {
 
       if (presentModeRef.current) {
         const idx = currentIndexRef.current;
-        const list = questionsRef.current;
+        const list = questionsRef.current.filter((q) => q.type !== 'feedback');
         const nextIdx = idx + 1;
         setResults(null);
         setAnswerStatus([]);
@@ -340,7 +341,9 @@ export default function HostPage() {
   };
 
   const onlineCount = participants.filter((p) => p.is_online).length;
-  const currentQ = questions[currentIndex] || null;
+  const gameQuestions = questions.filter((q) => q.type !== 'feedback');
+  const feedbackQuestions = questions.filter((q) => q.type === 'feedback');
+  const currentQ = gameQuestions[currentIndex] || null;
   const isLive = activeQuestion?.status === 'active';
 
   if (loading) {
@@ -377,7 +380,7 @@ export default function HostPage() {
     const qrSrc = joinUrl
       ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(joinUrl)}`
       : '';
-    const showLobby = !isLive && !showFinalResults && !betweenQuestions && !readyForResults && !answerReview;
+    const showLobby = !isLive && !showFinalResults && !betweenQuestions && !readyForResults && !answerReview && !feedbackPhase;
 
     // Build chart data even with 0 answers
     const liveChartResults = (() => {
@@ -400,9 +403,16 @@ export default function HostPage() {
     const revealAtEnd = room?.revealAnswersAtEnd !== false;
     const quizQuestions = revealAtEnd
       ? questions.filter(
-          (q) => q.is_quiz && q.correct_option_id && (q.options || []).length
+          (q) => q.type !== 'feedback' && q.is_quiz && q.correct_option_id && (q.options || []).length
         )
       : [];
+    const fbQuestions = questions.filter((q) => q.type === 'feedback');
+    const startFeedbackPhase = () => {
+      setFeedbackPhase(true);
+      setShowFinalResults(false);
+      setAnswerReview(false);
+      emitWithAck('present_phase', { phase: 'feedback' }).catch(() => {});
+    };
 
     const broadcastReview = (idx) => {
       const q = quizQuestions[idx];
@@ -431,12 +441,18 @@ export default function HostPage() {
         emitWithAck('present_phase', { phase: 'final_scores' }).catch(() => {});
         return;
       }
-      if (showFinalResults && !answerReview) {
-        if (quizQuestions.length === 0) return;
-        setAnswerReview(true);
-        setReviewIndex(0);
-        setShowFinalResults(false);
-        broadcastReview(0);
+      if (showFinalResults && !answerReview && !feedbackPhase) {
+        if (quizQuestions.length > 0) {
+          setAnswerReview(true);
+          setReviewIndex(0);
+          setShowFinalResults(false);
+          broadcastReview(0);
+          return;
+        }
+        if (room?.feedbackEnabled && fbQuestions.length > 0) {
+          startFeedbackPhase();
+          return;
+        }
         return;
       }
       if (answerReview) {
@@ -444,6 +460,8 @@ export default function HostPage() {
           const next = reviewIndex + 1;
           setReviewIndex(next);
           broadcastReview(next);
+        } else if (room?.feedbackEnabled && fbQuestions.length > 0) {
+          startFeedbackPhase();
         }
         return;
       }
@@ -519,9 +537,9 @@ export default function HostPage() {
             <span className="text-xs text-white/60 flex items-center gap-1">
               <Users className="w-3.5 h-3.5" /> {onlineCount}
             </span>
-            {questions.length > 0 && (
+            {gameQuestions.length > 0 && !feedbackPhase && (
               <span className="text-xs text-white/50">
-                Q{Math.min(currentIndex + 1, questions.length)}/{questions.length}
+                Q{Math.min(currentIndex + 1, gameQuestions.length)}/{gameQuestions.length}
               </span>
             )}
           </div>
@@ -554,7 +572,7 @@ export default function HostPage() {
               <JoinCard />
               <div className="text-left max-w-lg">
                 <p className="text-white/50 text-xs uppercase tracking-widest mb-2">
-                  Up next · Question {currentIndex + 1} of {questions.length}
+                  Up next · Question {currentIndex + 1} of {gameQuestions.length}
                 </p>
                 <h1 className="font-display text-3xl md:text-4xl font-bold mb-3 leading-tight">
                   Are you ready for the next puzzle?
@@ -611,7 +629,7 @@ export default function HostPage() {
               <div className="flex items-start gap-3 shrink-0">
                 <div className="flex-1 min-w-0">
                   <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">
-                    Question {currentIndex + 1} of {questions.length}
+                    Question {currentIndex + 1} of {gameQuestions.length}
                   </p>
                   <h1 className="font-display text-xl md:text-3xl font-bold leading-snug line-clamp-3">
                     {(activeQuestion || currentQ)?.question_text}
@@ -644,11 +662,34 @@ export default function HostPage() {
                   <p className="text-center text-slate-400 py-8">No scores yet</p>
                 )}
               </div>
-              {quizQuestions.length > 0 && (
+              {quizQuestions.length > 0 ? (
                 <button type="button" onClick={goNext} className="btn-accent px-6 py-3 shrink-0">
                   Reveal correct answers →
                 </button>
-              )}
+              ) : room?.feedbackEnabled && fbQuestions.length > 0 ? (
+                <button type="button" onClick={startFeedbackPhase} className="btn-accent px-6 py-3 shrink-0">
+                  Collect feedback →
+                </button>
+              ) : null}
+            </div>
+          )}
+
+          {feedbackPhase && !isLive && (
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 max-w-2xl mx-auto w-full">
+              <p className="text-white/40 text-[10px] uppercase tracking-widest">Feedback</p>
+              <h1 className="font-display text-3xl font-bold text-center">Collecting feedback</h1>
+              <p className="text-white/60 text-sm text-center max-w-md">
+                Participants are answering {fbQuestions.length} feedback question{fbQuestions.length !== 1 ? 's' : ''} on their devices (1–5 ratings).
+              </p>
+              <ul className="w-full bg-white/10 rounded-2xl p-4 space-y-2 max-h-[40vh] overflow-y-auto">
+                {fbQuestions.map((q, i) => (
+                  <li key={q.id} className="text-white/90 text-sm px-3 py-2 rounded-lg bg-white/5">
+                    <span className="text-white/40 mr-2">{i + 1}.</span>
+                    {q.question_text}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-white/40 text-xs">Export Excel later for Results + Feedback sheets</p>
             </div>
           )}
 
@@ -715,6 +756,10 @@ export default function HostPage() {
                     <button type="button" onClick={goNext} className="btn-accent px-6 py-2.5">
                       Next answer →
                     </button>
+                  ) : room?.feedbackEnabled && fbQuestions.length > 0 ? (
+                    <button type="button" onClick={startFeedbackPhase} className="btn-accent px-6 py-2.5">
+                      Continue to feedback →
+                    </button>
                   ) : (
                     <p className="text-white/50 text-sm">All correct answers revealed</p>
                   )}
@@ -768,7 +813,7 @@ export default function HostPage() {
               isLive ||
               (showFinalResults && quizQuestions.length === 0) ||
               (answerReview && reviewIndex >= quizQuestions.length - 1) ||
-              (!betweenQuestions && !readyForResults && !showFinalResults && !answerReview && currentIndex >= questions.length - 1)
+              (!betweenQuestions && !readyForResults && !showFinalResults && !answerReview && currentIndex >= gameQuestions.length - 1)
             }
             title="Next"
           >
@@ -818,7 +863,7 @@ export default function HostPage() {
               <Monitor className="w-4 h-4" /> Present
             </button>
             <a href={api.exportCsvUrl(token)} className="btn-secondary text-sm" download>
-              <Download className="w-4 h-4" /> Export CSV
+              <Download className="w-4 h-4" /> Export Excel
             </a>
             <button onClick={handleEndGame} className="btn-danger text-sm">
               <LogOut className="w-4 h-4" /> End Game
@@ -879,7 +924,9 @@ export default function HostPage() {
                 type="button"
                 onClick={() => { setCurrentIndex(i); setResults(null); setShowFinalResults(false); }}
                 className={`w-full text-left card p-3 transition ${
-                  i === currentIndex ? 'ring-2 ring-brand-500 border-brand-200' : 'hover:border-slate-200'
+                  (q.type !== 'feedback' && gameQuestions.indexOf(q) === currentIndex)
+                    ? 'ring-2 ring-brand-500 border-brand-200'
+                    : 'hover:border-slate-200'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -911,7 +958,7 @@ export default function HostPage() {
           {currentQ ? (
             <div className="card p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">
-                Question {currentIndex + 1} of {questions.length}
+                Question {currentIndex + 1} of {gameQuestions.length}
                 {timerLeft != null && isLive && (
                   <span className={`ml-3 tabular-nums ${timerLeft <= 5 ? 'text-red-500' : 'text-brand-600'}`}>
                     ⏱ {timerLeft}s
@@ -953,7 +1000,7 @@ export default function HostPage() {
                 <button onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))} className="btn-ghost" disabled={currentIndex <= 0}>
                   <ChevronLeft className="w-4 h-4" /> Prev
                 </button>
-                <button onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))} className="btn-ghost" disabled={currentIndex >= questions.length - 1}>
+                <button onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))} className="btn-ghost" disabled={currentIndex >= gameQuestions.length - 1}>
                   Next <ChevronRight className="w-4 h-4" />
                 </button>
               </div>

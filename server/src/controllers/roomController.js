@@ -112,10 +112,10 @@ function exportResults(req, res) {
     const room = roomService.getRoomByHostToken(token);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
-    const csv = questionService.exportCsv(room.id);
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="fun-game-${room.room_code}.csv"`);
-    res.send(csv);
+    const buf = questionService.exportExcel(room.id);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="fun-game-${room.room_code}.xlsx"`);
+    res.send(Buffer.from(buf));
   } catch (err) {
     console.error('exportResults error:', err);
     res.status(500).json({ error: 'Failed to export results' });
