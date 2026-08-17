@@ -76,6 +76,8 @@ function getHostRoom(req, res) {
         roomCode: room.room_code,
         status: room.status,
         title: room.title,
+        revealAnswersAtEnd: room.reveal_answers_at_end !== 0 && room.reveal_answers_at_end !== false,
+        feedbackEnabled: !!(room.feedback_enabled === 1 || room.feedback_enabled === true),
       },
       participants,
       questions,
@@ -120,6 +122,32 @@ function exportResults(req, res) {
   }
 }
 
+function updateSettings(req, res) {
+  try {
+    const token = req.headers['x-host-token'] || req.body.hostToken;
+    const room = roomService.getRoomByHostToken(token);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    const updated = roomService.updateRoomSettings(room.id, {
+      revealAnswersAtEnd: req.body.revealAnswersAtEnd,
+      feedbackEnabled: req.body.feedbackEnabled,
+    });
+    res.json({
+      success: true,
+      room: {
+        id: updated.id,
+        roomCode: updated.room_code,
+        status: updated.status,
+        title: updated.title,
+        revealAnswersAtEnd: updated.reveal_answers_at_end !== 0 && updated.reveal_answers_at_end !== false,
+        feedbackEnabled: !!(updated.feedback_enabled === 1 || updated.feedback_enabled === true),
+      },
+    });
+  } catch (err) {
+    console.error('updateSettings error:', err);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+}
+
 function deleteRoom(req, res) {
   try {
     const hostToken = req.body?.hostToken || req.headers['x-host-token'] || req.params.token;
@@ -149,4 +177,5 @@ module.exports = {
   endRoom,
   exportResults,
   deleteRoom,
+  updateSettings,
 };

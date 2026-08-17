@@ -19,6 +19,8 @@ function createRoom(title = 'Fun Game Session', ownerUserId = null) {
     status: 'waiting',
     title: title || 'Fun Game Session',
     owner_user_id: ownerUserId || null,
+    reveal_answers_at_end: 1,
+    feedback_enabled: 0,
     created_at: new Date().toISOString(),
     ended_at: null,
   };
@@ -30,7 +32,22 @@ function createRoom(title = 'Fun Game Session', ownerUserId = null) {
     status: room.status,
     title: room.title,
     ownerUserId: room.owner_user_id,
+    revealAnswersAtEnd: true,
+    feedbackEnabled: false,
   };
+}
+
+function updateRoomSettings(roomId, settings = {}) {
+  const patch = {};
+  if (typeof settings.revealAnswersAtEnd === 'boolean') {
+    patch.reveal_answers_at_end = settings.revealAnswersAtEnd ? 1 : 0;
+  }
+  if (typeof settings.feedbackEnabled === 'boolean') {
+    patch.feedback_enabled = settings.feedbackEnabled ? 1 : 0;
+  }
+  if (!Object.keys(patch).length) return getRoomById(roomId);
+  update('rooms', (r) => r.id === roomId, patch);
+  return getRoomById(roomId);
 }
 
 function listRoomsByOwner(userId) {
@@ -119,6 +136,7 @@ module.exports = {
   getRoomById,
   getRoomByHostToken,
   updateRoomStatus,
+  updateRoomSettings,
   getParticipantCount,
   getOnlineCount,
   deleteRoom,

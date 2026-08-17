@@ -79,6 +79,13 @@ export const api = {
       headers: { 'X-Host-Token': token },
     }),
 
+  updateRoomSettings: (token, settings) =>
+    request('/rooms/settings', {
+      method: 'POST',
+      headers: { 'X-Host-Token': token },
+      body: JSON.stringify({ hostToken: token, ...settings }),
+    }),
+
   endRoom: (token) =>
     request('/rooms/end', {
       method: 'POST',

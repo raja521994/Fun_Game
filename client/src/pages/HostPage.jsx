@@ -360,6 +360,15 @@ export default function HostPage() {
     );
   }
 
+  const saveRoomSetting = async (patch) => {
+    try {
+      const res = await api.updateRoomSettings(token, patch);
+      if (res.room) setRoom((r) => ({ ...r, ...res.room }));
+    } catch (err) {
+      alert(err.message || 'Could not save setting');
+    }
+  };
+
   // —— PRESENT MODE ——
   if (presentMode) {
     const roomCode = room?.roomCode || '';
@@ -388,13 +397,12 @@ export default function HostPage() {
       };
     })();
 
-    const quizQuestions = questions.filter(
-      (q) =>
-        q.is_quiz &&
-        q.correct_option_id &&
-        (q.options || []).length &&
-        (q.reveal_at_end === 1 || q.reveal_at_end === true)
-    );
+    const revealAtEnd = room?.revealAnswersAtEnd !== false;
+    const quizQuestions = revealAtEnd
+      ? questions.filter(
+          (q) => q.is_quiz && q.correct_option_id && (q.options || []).length
+        )
+      : [];
 
     const broadcastReview = (idx) => {
       const q = quizQuestions[idx];
@@ -819,7 +827,38 @@ export default function HostPage() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto w-full px-4 py-6 grid lg:grid-cols-12 gap-6 flex-1">
+      <div className="max-w-7xl mx-auto w-full px-4 pt-6">
+        <div className="card p-4 mb-4">
+          <h2 className="font-display font-bold text-slate-800 mb-3 text-sm">Room settings</h2>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <label className="flex items-start gap-3 cursor-pointer flex-1">
+              <input
+                type="checkbox"
+                checked={room?.revealAnswersAtEnd !== false}
+                onChange={(e) => saveRoomSetting({ revealAnswersAtEnd: e.target.checked })}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-brand-600"
+              />
+              <span>
+                <span className="text-sm font-medium text-slate-800 block">Reveal correct answers at the end</span>
+                <span className="text-xs text-slate-500">After final scores, show correct answers one-by-one for all quiz questions</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer flex-1">
+              <input
+                type="checkbox"
+                checked={!!room?.feedbackEnabled}
+                onChange={(e) => saveRoomSetting({ feedbackEnabled: e.target.checked })}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-brand-600"
+              />
+              <span>
+                <span className="text-sm font-medium text-slate-800 block">Collect feedback</span>
+                <span className="text-xs text-slate-500">Turn on to add Feedback (1–5) questions like normal questions</span>
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div className="max-w-7xl mx-auto w-full px-4 pb-6 grid lg:grid-cols-12 gap-6 flex-1">
         <aside className="lg:col-span-3 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display font-bold text-slate-800">Questions</h2>
@@ -828,7 +867,7 @@ export default function HostPage() {
             </button>
           </div>
           {showForm && (
-            <QuestionForm onSubmit={handleCreateQuestion} onCancel={() => setShowForm(false)} loading={creatingQ} />
+            <QuestionForm onSubmit={handleCreateQuestion} onCancel={() => setShowForm(false)} loading={creatingQ} feedbackEnabled={!!room?.feedbackEnabled} />
           )}
           <div className="space-y-2">
             {questions.length === 0 && !showForm && (
@@ -846,7 +885,7 @@ export default function HostPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-xs text-slate-400 capitalize mb-0.5">
-                      {q.type.replace('_', ' ')}{q.is_quiz ? ' · Quiz' : ''}{q.reveal_at_end ? ' · Reveal' : ''}
+                      {q.type.replace('_', ' ')}{q.is_quiz ? ' · Quiz' : ''}
                     </p>
                     <p className="text-sm font-medium text-slate-800 truncate">{q.question_text}</p>
                   </div>
