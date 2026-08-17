@@ -24,6 +24,7 @@ export default function ParticipantPage() {
   const [feedbackAnswers, setFeedbackAnswers] = useState({});
   const [feedbackDone, setFeedbackDone] = useState(false);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [thankYouMessage, setThankYouMessage] = useState('Thank you for playing!');
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -75,7 +76,7 @@ export default function ParticipantPage() {
       setStatus((s) => (s === 'active' || s === 'answered' ? 'waiting' : s));
     };
 
-    const onPresentPhase = ({ phase, leaderboard: lb, review, feedbackQuestions: fbqs }) => {
+    const onPresentPhase = ({ phase, leaderboard: lb, review, feedbackQuestions: fbqs, thankYouMessage }) => {
       if (lb) setLeaderboard(lb);
       if (phase === 'between') {
         setAnswerReview(null);
@@ -92,6 +93,11 @@ export default function ParticipantPage() {
       } else if (phase === 'answer_review') {
         setAnswerReview(review || null);
         setStatus('answer_review');
+        setTimerLeft(null);
+      } else if (phase === 'thank_you') {
+        setAnswerReview(null);
+        setThankYouMessage(thankYouMessage || 'Thank you for playing!');
+        setStatus('thank_you');
         setTimerLeft(null);
       } else if (phase === 'feedback') {
         setAnswerReview(null);
@@ -273,6 +279,19 @@ export default function ParticipantPage() {
           )}
         </div>
         <p className="text-center text-white/40 text-xs mt-6">Thanks for playing, {name}!</p>
+      </div>
+    );
+  }
+
+  if (status === 'thank_you') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center bg-slate-900 text-white min-h-dvh">
+        <div className="text-5xl mb-4 select-none" aria-hidden>🙏</div>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Closing</p>
+        <h1 className="font-display text-2xl sm:text-3xl font-bold whitespace-pre-line leading-snug max-w-md">
+          {thankYouMessage}
+        </h1>
+        <p className="text-white/50 text-sm mt-6">Please wait for the host…</p>
       </div>
     );
   }

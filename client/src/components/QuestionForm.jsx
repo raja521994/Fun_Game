@@ -11,16 +11,18 @@ const BASE_TYPES = [
 
 const TIMERS = [0, 5, 10, 15, 30, 60];
 
-export default function QuestionForm({ onSubmit, onCancel, loading, feedbackEnabled = false }) {
-  const TYPES = feedbackEnabled
-    ? [
-        ...BASE_TYPES.slice(0, 3),
-        { value: 'feedback', label: 'Feedback (1–5)' },
-        ...BASE_TYPES.slice(3),
-      ]
+export default function QuestionForm({
+  onSubmit,
+  onCancel,
+  loading,
+  feedbackEnabled = false,
+  feedbackOnly = false,
+}) {
+  const TYPES = feedbackOnly
+    ? [{ value: 'feedback', label: 'Feedback (1–5)' }]
     : BASE_TYPES;
 
-  const [type, setType] = useState('multiple_choice');
+  const [type, setType] = useState(feedbackOnly ? 'feedback' : 'multiple_choice');
   const [questionText, setQuestionText] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isQuiz, setIsQuiz] = useState(false);
@@ -36,11 +38,11 @@ export default function QuestionForm({ onSubmit, onCancel, loading, feedbackEnab
     const quizOn = canBeQuiz && isQuiz;
 
     const payload = {
-      type,
+      type: feedbackOnly ? 'feedback' : type,
       questionText: questionText.trim(),
-      isQuiz: quizOn,
-      correctOptionIndex: quizOn ? correctIndex : null,
-      timerSeconds: quizOn || timerSeconds > 0 ? timerSeconds : 0,
+      isQuiz: feedbackOnly ? false : quizOn,
+      correctOptionIndex: feedbackOnly ? null : quizOn ? correctIndex : null,
+      timerSeconds: feedbackOnly ? 0 : quizOn || timerSeconds > 0 ? timerSeconds : 0,
     };
 
     if (type === 'multiple_choice') {
@@ -73,7 +75,9 @@ export default function QuestionForm({ onSubmit, onCancel, loading, feedbackEnab
   return (
     <form onSubmit={handleSubmit} className="card p-6 space-y-5 animate-slide-up">
       <div className="flex items-center justify-between">
-        <h3 className="font-display font-bold text-lg text-slate-800">New Question</h3>
+        <h3 className="font-display font-bold text-lg text-slate-800">
+          {feedbackOnly ? 'New feedback question' : 'New Question'}
+        </h3>
         {onCancel && (
           <button type="button" onClick={onCancel} className="btn-ghost p-1.5">
             <X className="w-5 h-5" />
@@ -81,34 +85,36 @@ export default function QuestionForm({ onSubmit, onCancel, loading, feedbackEnab
         )}
       </div>
 
-      <div>
-        <label className="label">Type</label>
-        <div className="flex flex-wrap gap-2">
-          {TYPES.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => {
-                setType(t.value);
-                if (t.value !== 'multiple_choice' && t.value !== 'yes_no') setIsQuiz(false);
-                if (t.value === 'yes_no') setCorrectIndex(0);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                type === t.value
-                  ? 'bg-brand-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+      {!feedbackOnly && (
+        <div>
+          <label className="label">Type</label>
+          <div className="flex flex-wrap gap-2">
+            {TYPES.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => {
+                  setType(t.value);
+                  if (t.value !== 'multiple_choice' && t.value !== 'yes_no') setIsQuiz(false);
+                  if (t.value === 'yes_no') setCorrectIndex(0);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                  type === t.value
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-        {!feedbackEnabled && (
-          <p className="text-xs text-slate-400 mt-2">
-            Enable <strong>Collect feedback</strong> in room settings to add Feedback (1–5) questions.
-          </p>
-        )}
-      </div>
+      )}
+      {feedbackOnly && (
+        <p className="text-xs text-slate-500 rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
+          Rating scale 1–5 · Shown to the audience after the thank-you message
+        </p>
+      )}
 
       <div>
         <label className="label">Question</label>
@@ -272,4 +278,3 @@ export default function QuestionForm({ onSubmit, onCancel, loading, feedbackEnab
     </form>
   );
 }
-

@@ -295,6 +295,10 @@ function registerSocketHandlers(io) {
         if (phase === 'answer_review' && review) {
           payload.review = review;
         }
+        if (phase === 'thank_you') {
+          const room = roomService.getRoomById(roomId);
+          payload.thankYouMessage = room?.thank_you_message || 'Thank you for playing!';
+        }
         if (phase === 'feedback') {
           const qs = questionService.getQuestionsByRoom(roomId).filter((q) => q.type === 'feedback');
           payload.feedbackQuestions = qs.map((q) => ({

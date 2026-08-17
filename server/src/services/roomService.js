@@ -21,6 +21,8 @@ function createRoom(title = 'Fun Game Session', ownerUserId = null) {
     owner_user_id: ownerUserId || null,
     reveal_answers_at_end: 1,
     feedback_enabled: 0,
+    thank_you_message: 'Thank you for playing!
+We appreciate your time and feedback.',
     created_at: new Date().toISOString(),
     ended_at: null,
   };
@@ -44,6 +46,9 @@ function updateRoomSettings(roomId, settings = {}) {
   }
   if (typeof settings.feedbackEnabled === 'boolean') {
     patch.feedback_enabled = settings.feedbackEnabled ? 1 : 0;
+  }
+  if (typeof settings.thankYouMessage === 'string') {
+    patch.thank_you_message = settings.thankYouMessage.slice(0, 1000);
   }
   if (!Object.keys(patch).length) return getRoomById(roomId);
   update('rooms', (r) => r.id === roomId, patch);

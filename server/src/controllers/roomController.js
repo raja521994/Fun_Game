@@ -78,6 +78,7 @@ function getHostRoom(req, res) {
         title: room.title,
         revealAnswersAtEnd: room.reveal_answers_at_end !== 0 && room.reveal_answers_at_end !== false,
         feedbackEnabled: !!(room.feedback_enabled === 1 || room.feedback_enabled === true),
+        thankYouMessage: room.thank_you_message || 'Thank you for playing!',
       },
       participants,
       questions,
@@ -130,6 +131,7 @@ function updateSettings(req, res) {
     const updated = roomService.updateRoomSettings(room.id, {
       revealAnswersAtEnd: req.body.revealAnswersAtEnd,
       feedbackEnabled: req.body.feedbackEnabled,
+      thankYouMessage: req.body.thankYouMessage,
     });
     res.json({
       success: true,
@@ -140,6 +142,7 @@ function updateSettings(req, res) {
         title: updated.title,
         revealAnswersAtEnd: updated.reveal_answers_at_end !== 0 && updated.reveal_answers_at_end !== false,
         feedbackEnabled: !!(updated.feedback_enabled === 1 || updated.feedback_enabled === true),
+        thankYouMessage: updated.thank_you_message || 'Thank you for playing!',
       },
     });
   } catch (err) {
