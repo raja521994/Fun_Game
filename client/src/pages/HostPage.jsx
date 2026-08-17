@@ -42,6 +42,8 @@ export default function HostPage() {
   const [showFinalResults, setShowFinalResults] = useState(false);
   const [betweenQuestions, setBetweenQuestions] = useState(false);
   const [readyForResults, setReadyForResults] = useState(false);
+  const [answerReview, setAnswerReview] = useState(false);
+  const [reviewIndex, setReviewIndex] = useState(0);
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
   const [timerLeft, setTimerLeft] = useState(null);
@@ -366,7 +368,7 @@ export default function HostPage() {
     const qrSrc = joinUrl
       ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(joinUrl)}`
       : '';
-    const showLobby = !isLive && !showFinalResults && !betweenQuestions && !readyForResults;
+    const showLobby = !isLive && !showFinalResults && !betweenQuestions && !readyForResults && !answerReview;
 
     // Build chart data even with 0 answers
     const liveChartResults = (() => {
@@ -386,11 +388,51 @@ export default function HostPage() {
       };
     })();
 
+    const quizQuestions = questions.filter(
+      (q) => q.is_quiz && q.correct_option_id && (q.options || []).length
+    );
+
+    const broadcastReview = (idx) => {
+      const q = quizQuestions[idx];
+      if (!q) return;
+      const correct = (q.options || []).find((o) => o.id === q.correct_option_id);
+      emitWithAck('present_phase', {
+        phase: 'answer_review',
+        review: {
+          index: idx,
+          total: quizQuestions.length,
+          questionText: q.question_text,
+          correctText: correct?.option_text || correct?.text || '',
+          options: (q.options || []).map((o) => ({
+            text: o.option_text || o.text,
+            isCorrect: o.id === q.correct_option_id,
+          })),
+          type: q.type,
+        },
+      }).catch(() => {});
+    };
+
     const goNext = () => {
       if (readyForResults) {
         setReadyForResults(false);
         setShowFinalResults(true);
         emitWithAck('present_phase', { phase: 'final_scores' }).catch(() => {});
+        return;
+      }
+      if (showFinalResults && !answerReview) {
+        if (quizQuestions.length === 0) return;
+        setAnswerReview(true);
+        setReviewIndex(0);
+        setShowFinalResults(false);
+        broadcastReview(0);
+        return;
+      }
+      if (answerReview) {
+        if (reviewIndex < quizQuestions.length - 1) {
+          const next = reviewIndex + 1;
+          setReviewIndex(next);
+          broadcastReview(next);
+        }
         return;
       }
       if (betweenQuestions) {
@@ -403,6 +445,18 @@ export default function HostPage() {
     };
 
     const goPrev = () => {
+      if (answerReview) {
+        if (reviewIndex > 0) {
+          const prev = reviewIndex - 1;
+          setReviewIndex(prev);
+          broadcastReview(prev);
+        } else {
+          setAnswerReview(false);
+          setShowFinalResults(true);
+          emitWithAck('present_phase', { phase: 'final_scores' }).catch(() => {});
+        }
+        return;
+      }
       if (readyForResults) {
         setReadyForResults(false);
         return;
@@ -565,7 +619,7 @@ export default function HostPage() {
             </div>
           )}
 
-          {showFinalResults && !isLive && !betweenQuestions && !readyForResults && (
+          {showFinalResults && !isLive && !betweenQuestions && !readyForResults && !answerReview && (
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 max-w-xl mx-auto w-full overflow-hidden">
               <div className="text-center shrink-0">
                 <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">Game complete</p>
@@ -578,8 +632,84 @@ export default function HostPage() {
                   <p className="text-center text-slate-400 py-8">No scores yet</p>
                 )}
               </div>
+              {quizQuestions.length > 0 && (
+                <button type="button" onClick={goNext} className="btn-accent px-6 py-3 shrink-0">
+                  Reveal correct answers →
+                </button>
+              )}
             </div>
           )}
+
+          {/* One-by-one correct answer reveal */}
+          {answerReview && !isLive && (() => {
+            const q = quizQuestions[reviewIndex];
+            if (!q) return null;
+            const correct = (q.options || []).find((o) => o.id === q.correct_option_id);
+            const correctText = correct?.option_text || correct?.text || '—';
+            const opts = q.options || [];
+            return (
+              <div className="flex-1 min-h-0 flex flex-col items-center justify-center max-w-3xl mx-auto w-full px-2">
+                <p className="text-white/40 text-[10px] uppercase tracking-widest mb-2">
+                  Answer key · {reviewIndex + 1} of {quizQuestions.length}
+                </p>
+                <div className="w-full bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-white/10">
+                  <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-6 py-4 text-white">
+                    <p className="text-xs uppercase tracking-wider text-white/70 mb-1">Question</p>
+                    <h2 className="font-display text-xl md:text-2xl font-bold leading-snug">
+                      {q.question_text}
+                    </h2>
+                  </div>
+                  <div className="p-6 md:p-8 space-y-3">
+                    {opts.map((o, i) => {
+                      const isCorrect = o.id === q.correct_option_id;
+                      const label = o.option_text || o.text;
+                      return (
+                        <div
+                          key={o.id || i}
+                          className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 border-2 transition-all duration-500 ${
+                            isCorrect
+                              ? 'border-emerald-500 bg-emerald-50 shadow-lg shadow-emerald-500/20 scale-[1.02]'
+                              : 'border-slate-100 bg-slate-50 opacity-60'
+                          }`}
+                        >
+                          <span
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+                              isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'
+                            }`}
+                          >
+                            {isCorrect ? '✓' : String.fromCharCode(65 + i)}
+                          </span>
+                          <span className={`flex-1 font-medium ${isCorrect ? 'text-emerald-900' : 'text-slate-600'}`}>
+                            {label}
+                          </span>
+                          {isCorrect && (
+                            <span className="text-xs font-bold uppercase tracking-wide text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">
+                              Correct
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <div className="mt-4 text-center">
+                      <p className="text-sm text-slate-500">The correct answer is</p>
+                      <p className="font-display text-2xl md:text-3xl font-bold text-emerald-600 mt-1 animate-fade-in">
+                        {correctText}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 mt-5">
+                  {reviewIndex < quizQuestions.length - 1 ? (
+                    <button type="button" onClick={goNext} className="btn-accent px-6 py-2.5">
+                      Next answer →
+                    </button>
+                  ) : (
+                    <p className="text-white/50 text-sm">All correct answers revealed</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <div className="flex justify-center items-center gap-2 py-2.5 bg-black/30 shrink-0 h-14">
@@ -598,6 +728,16 @@ export default function HostPage() {
               <Play className="w-4 h-4" /> Reveal scores
             </button>
           )}
+          {showFinalResults && !answerReview && quizQuestions.length > 0 && (
+            <button onClick={goNext} className="btn-accent text-sm py-2">
+              Reveal answers
+            </button>
+          )}
+          {answerReview && reviewIndex < quizQuestions.length - 1 && (
+            <button onClick={goNext} className="btn-accent text-sm py-2">
+              Next answer
+            </button>
+          )}
           <button onClick={handleStop} className="btn bg-white/15 text-white hover:bg-white/25 text-sm py-2" disabled={!isLive}>
             <Square className="w-4 h-4" /> Stop
           </button>
@@ -612,7 +752,12 @@ export default function HostPage() {
           <button
             onClick={goNext}
             className="btn bg-white/15 text-white hover:bg-white/25 text-sm py-2 px-3"
-            disabled={isLive || showFinalResults || (!betweenQuestions && !readyForResults && currentIndex >= questions.length - 1)}
+            disabled={
+              isLive ||
+              (showFinalResults && quizQuestions.length === 0) ||
+              (answerReview && reviewIndex >= quizQuestions.length - 1) ||
+              (!betweenQuestions && !readyForResults && !showFinalResults && !answerReview && currentIndex >= questions.length - 1)
+            }
             title="Next"
           >
             <ChevronRight className="w-4 h-4" />
