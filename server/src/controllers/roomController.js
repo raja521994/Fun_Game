@@ -120,6 +120,27 @@ function exportResults(req, res) {
   }
 }
 
+function deleteRoom(req, res) {
+  try {
+    const hostToken = req.body?.hostToken || req.headers['x-host-token'] || req.params.token;
+    const roomId = req.params.roomId;
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Login required' });
+    }
+    if (roomId) {
+      roomService.deleteRoom(roomId, req.user.id);
+    } else if (hostToken) {
+      roomService.deleteRoomByHostToken(hostToken, req.user.id);
+    } else {
+      return res.status(400).json({ error: 'Room id or host token required' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('deleteRoom error:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Failed to delete room' });
+  }
+}
+
 module.exports = {
   createRoom,
   listMyRooms,
@@ -127,4 +148,5 @@ module.exports = {
   getHostRoom,
   endRoom,
   exportResults,
+  deleteRoom,
 };

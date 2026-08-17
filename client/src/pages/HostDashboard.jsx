@@ -90,9 +90,14 @@ export default function HostDashboard() {
   const handleRemove = async (room, e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm('Remove this room from your list? You can still end it from the host panel.')) return;
-    removeHostRoom(room.hostToken);
-    setRooms((prev) => prev.filter((r) => r.hostToken !== room.hostToken));
+    if (!confirm('Permanently delete this room and all its questions, answers, and results?')) return;
+    try {
+      await api.deleteRoom({ roomId: room.roomId, hostToken: room.hostToken });
+      removeHostRoom(room.hostToken);
+      setRooms((prev) => prev.filter((r) => r.hostToken !== room.hostToken));
+    } catch (err) {
+      setError(err.message || 'Could not delete room');
+    }
   };
 
   const copyCode = (code, e) => {

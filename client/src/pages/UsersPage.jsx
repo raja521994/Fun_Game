@@ -63,6 +63,11 @@ export default function UsersPage() {
   };
 
   const handleDelete = async (id) => {
+    const target = users.find((u) => u.id === id);
+    if (target?.isRoot) {
+      setError('The root admin cannot be deleted');
+      return;
+    }
     if (!confirm('Delete this user? They will no longer be able to create rooms.')) return;
     try {
       await api.deleteUser(id);
@@ -138,14 +143,20 @@ export default function UsersPage() {
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 capitalize">
                   {u.role}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(u.id)}
-                  className="btn-ghost p-2 text-slate-400 hover:text-red-500"
-                  title="Delete user"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {u.isRoot ? (
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 bg-amber-50 px-2 py-1 rounded-full">
+                    Root
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(u.id)}
+                    className="btn-ghost p-2 text-slate-400 hover:text-red-500"
+                    title="Delete user"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
