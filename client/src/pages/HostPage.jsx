@@ -15,6 +15,7 @@ import {
   Check,
   Trash2,
   LogOut,
+  Save,
 } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, emitWithAck, getSocket } from '../services/socket';
@@ -48,6 +49,8 @@ export default function HostPage() {
   const [thankYouPhase, setThankYouPhase] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
   const [thankYouDraft, setThankYouDraft] = useState('');
+  const [saveMsg, setSaveMsg] = useState('');
+  const [saving, setSaving] = useState(false);
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
   const [timerLeft, setTimerLeft] = useState(null);
@@ -370,6 +373,52 @@ export default function HostPage() {
       </div>
     );
   }
+
+  const handleSaveRoom = async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      // Persist thank-you text and current room flags
+      if (room?.feedbackEnabled) {
+        await api.updateRoomSettings(token, {
+          thankYouMessage: thankYouDraft,
+          feedbackEnabled: true,
+          revealAnswersAtEnd: room?.revealAnswersAtEnd !== false,
+        });
+      } else {
+        await api.updateRoomSettings(token, {
+          revealAnswersAtEnd: room?.revealAnswersAtEnd !== false,
+          feedbackEnabled: false,
+          thankYouMessage: thankYouDraft,
+        });
+      }
+
+      // Reload from server to confirm questions are stored
+      const res = await api.getHostRoom(token);
+      if (res.room) setRoom(res.room);
+      if (res.questions) setQuestions(res.questions);
+      if (res.participants) setParticipants(res.participants);
+
+      const n = (res.questions || []).length;
+      const g = (res.questions || []).filter((q) => q.type !== 'feedback').length;
+      const f = (res.questions || []).filter((q) => q.type === 'feedback').length;
+
+      upsertHostRoom({
+        hostToken: token,
+        roomCode: res.room?.roomCode,
+        roomId: res.room?.id,
+        title: res.room?.title,
+        status: res.room?.status,
+      });
+
+      setSaveMsg(`Saved — ${g} question${g !== 1 ? 's' : ''}${f ? `, ${f} feedback` : ''} stored`);
+      setTimeout(() => setSaveMsg(''), 4000);
+    } catch (err) {
+      setSaveMsg(err.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const saveRoomSetting = async (patch) => {
     try {
@@ -700,7 +749,7 @@ export default function HostPage() {
             <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-6 max-w-2xl mx-auto w-full px-4">
               <div className="text-6xl select-none" aria-hidden>🙏</div>
               <div className="text-center space-y-4">
-                <p className="text-white/40 text-[10px] uppercase tracking-widest">Closing</p>
+                
                 <div className="font-display text-2xl md:text-4xl font-bold text-white whitespace-pre-line leading-snug">
                   {room?.thankYouMessage || 'Thank you for playing!'}
                 </div>
@@ -903,6 +952,16 @@ export default function HostPage() {
             <Link to="/rooms" className="btn-secondary text-sm">
               My rooms
             </Link>
+            <button
+              type="button"
+              onClick={handleSaveRoom}
+              className="btn-secondary text-sm"
+              disabled={saving}
+              title="Save questions and settings before leaving"
+            >
+              <Save className="w-4 h-4" />
+              {saving ? 'Saving…' : 'Save'}
+            </button>
             <button onClick={() => setPresentMode(true)} className="btn-secondary text-sm">
               <Monitor className="w-4 h-4" /> Present
             </button>
@@ -915,6 +974,12 @@ export default function HostPage() {
           </div>
         </div>
       </header>
+
+      {saveMsg && (
+        <div className="bg-accent-500/10 border-b border-accent-500/20 text-accent-700 text-sm text-center py-2 px-4">
+          {saveMsg}
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto w-full px-4 pt-6">
         <div className="card p-4 mb-4">
@@ -1165,4 +1230,3 @@ export default function HostPage() {
     </div>
   );
 }
-

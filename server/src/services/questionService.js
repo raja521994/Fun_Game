@@ -122,7 +122,10 @@ function setResultsStatus(questionId) {
 function submitAnswer({ questionId, participantId, answerText, optionId, responseTimeMs }) {
   const q = getQuestionById(questionId);
   if (!q) throw new Error('Question not found');
-  if (q.status !== 'active') throw new Error('Question is not accepting answers');
+  // Feedback questions accept answers during the post-game feedback phase (not "active")
+  if (q.status !== 'active' && q.type !== 'feedback') {
+    throw new Error('Question is not accepting answers');
+  }
   const existing = findOne('answers', (a) => a.question_id === questionId && a.participant_id === participantId);
   if (existing) throw new Error('You have already answered this question');
 

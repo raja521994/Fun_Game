@@ -287,7 +287,7 @@ export default function ParticipantPage() {
     return (
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center bg-slate-900 text-white min-h-dvh">
         <div className="text-5xl mb-4 select-none" aria-hidden>🙏</div>
-        <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Closing</p>
+        
         <h1 className="font-display text-2xl sm:text-3xl font-bold whitespace-pre-line leading-snug max-w-md">
           {thankYouMessage}
         </h1>
@@ -530,4 +530,3 @@ export default function ParticipantPage() {
     </div>
   );
 }
-

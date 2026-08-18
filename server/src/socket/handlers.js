@@ -301,6 +301,20 @@ function registerSocketHandlers(io) {
         }
         if (phase === 'feedback') {
           const qs = questionService.getQuestionsByRoom(roomId).filter((q) => q.type === 'feedback');
+          // Mark feedback questions active so answers are accepted
+          for (const q of qs) {
+            try {
+              if (q.status !== 'active') {
+                const { update } = require('../database/db');
+                update('questions', (row) => row.id === q.id, {
+                  status: 'active',
+                  is_active: 1,
+                });
+              }
+            } catch (e) {
+              /* continue */
+            }
+          }
           payload.feedbackQuestions = qs.map((q) => ({
             id: q.id,
             questionText: q.question_text,
@@ -480,4 +494,3 @@ function sanitizeResultsForParticipants(results, question) {
 }
 
 module.exports = { registerSocketHandlers };
-
