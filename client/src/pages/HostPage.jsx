@@ -962,7 +962,23 @@ export default function HostPage() {
               <Save className="w-4 h-4" />
               {saving ? 'Saving…' : 'Save'}
             </button>
-            <button onClick={() => setPresentMode(true)} className="btn-secondary text-sm">
+            <button
+              onClick={() => {
+                // Always start presentation from question 1
+                setCurrentIndex(0);
+                setPresentMode(true);
+                setBetweenQuestions(false);
+                setReadyForResults(false);
+                setShowFinalResults(false);
+                setAnswerReview(false);
+                setThankYouPhase(false);
+                setFeedbackPhase(false);
+                setActiveQuestion(null);
+                setResults(null);
+                setTimerLeft(null);
+              }}
+              className="btn-secondary text-sm"
+            >
               <Monitor className="w-4 h-4" /> Present
             </button>
             <a href={api.exportCsvUrl(token)} className="btn-secondary text-sm" download>
