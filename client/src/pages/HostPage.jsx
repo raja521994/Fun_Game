@@ -626,7 +626,7 @@ export default function HostPage() {
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-hidden px-4 py-3 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden px-4 py-2 pb-1 flex flex-col">
           {showLobby && (
             <div className="flex-1 min-h-0 flex flex-row items-center justify-center gap-8">
               <JoinCard />
@@ -696,21 +696,21 @@ export default function HostPage() {
           )}
 
           {isLive && (
-            <div className="flex-1 min-h-0 flex flex-col gap-2 max-w-6xl mx-auto w-full">
+            <div className="flex-1 min-h-0 flex flex-col gap-2 max-w-7xl mx-auto w-full h-full">
               <div className="flex items-start gap-3 shrink-0">
                 <div className="flex-1 min-w-0">
-                  <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">
+                  <p className="text-white/40 text-[10px] uppercase tracking-wider mb-0.5">
                     Question {currentIndex + 1} of {gameQuestions.length}
                   </p>
-                  <h1 className="font-display text-xl md:text-3xl font-bold leading-snug line-clamp-3">
+                  <h1 className="font-display text-lg md:text-2xl lg:text-3xl font-bold leading-snug line-clamp-2">
                     {(activeQuestion || currentQ)?.question_text}
                   </h1>
                 </div>
                 <JoinCard compact />
               </div>
-              <div className="flex-1 min-h-0 bg-white text-slate-900 rounded-2xl p-4 md:p-6 shadow-2xl overflow-hidden flex flex-col">
+              <div className="flex-1 min-h-0 bg-white text-slate-900 rounded-2xl p-3 md:p-5 shadow-2xl overflow-hidden flex flex-col">
                 {liveChartResults ? (
-                  <div className="flex-1 min-h-0">
+                  <div className="flex-1 min-h-0 w-full h-full">
                     <ResultsChart results={liveChartResults} presentMode />
                   </div>
                 ) : (
