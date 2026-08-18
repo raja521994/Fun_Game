@@ -789,18 +789,18 @@ export default function HostPage() {
             const correctText = correct?.option_text || correct?.text || '—';
             const opts = q.options || [];
             return (
-              <div className="flex-1 min-h-0 flex flex-col items-center max-w-3xl mx-auto w-full px-2 py-1">
-                <p className="text-white/40 text-[10px] uppercase tracking-widest mb-1.5 shrink-0">
+              <div className="flex-1 min-h-0 flex flex-col items-center justify-center max-w-2xl mx-auto w-full px-2 py-1 overflow-y-auto">
+                <p className="text-white/40 text-[10px] uppercase tracking-widest mb-2 shrink-0">
                   Answer key · {reviewIndex + 1} of {quizQuestions.length}
                 </p>
-                <div className="w-full flex-1 min-h-0 flex flex-col bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-2xl md:rounded-3xl shadow-2xl border border-white/10 overflow-hidden">
-                  <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-4 md:px-6 py-3 md:py-4 text-white shrink-0">
+                <div className="w-full flex flex-col bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-2xl shadow-2xl border border-white/10 overflow-hidden max-h-full">
+                  <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-4 md:px-5 py-3 text-white shrink-0">
                     <p className="text-[10px] uppercase tracking-wider text-white/70 mb-0.5">Question</p>
-                    <h2 className="font-display text-base md:text-xl lg:text-2xl font-bold leading-snug line-clamp-3">
+                    <h2 className="font-display text-base md:text-lg lg:text-xl font-bold leading-snug">
                       {q.question_text}
                     </h2>
                   </div>
-                  <div className="flex-1 min-h-0 overflow-y-auto px-3 md:px-6 py-3 space-y-2">
+                  <div className="px-3 md:px-5 py-3 space-y-2 overflow-y-auto">
                     {opts.map((o, i) => {
                       const isCorrect = o.id === q.correct_option_id;
                       const label = o.option_text || o.text;
@@ -836,14 +836,14 @@ export default function HostPage() {
                       );
                     })}
                   </div>
-                  <div className="shrink-0 border-t border-emerald-100 bg-emerald-50/80 px-4 py-3 text-center">
-                    <p className="text-xs text-slate-500">The correct answer is</p>
-                    <p className="font-display text-lg md:text-xl lg:text-2xl font-bold text-emerald-600 mt-0.5 break-words">
+                  <div className="shrink-0 border-t border-emerald-100 bg-emerald-50/80 px-4 py-2.5 text-center">
+                    <p className="text-[11px] text-slate-500">The correct answer is</p>
+                    <p className="font-display text-base md:text-lg font-bold text-emerald-600 mt-0.5 break-words">
                       {correctText}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 mt-2 shrink-0">
+                <div className="flex items-center gap-3 mt-3 shrink-0">
                   {reviewIndex < quizQuestions.length - 1 ? (
                     <button type="button" onClick={goNext} className="btn-accent px-5 py-2 text-sm">
                       Next answer →
@@ -862,8 +862,13 @@ export default function HostPage() {
         </div>
 
         <div className="flex justify-center items-center gap-2 py-2.5 bg-black/30 shrink-0 h-14">
-          {!betweenQuestions && !readyForResults && (
-            <button onClick={handleStart} className="btn-accent text-sm py-2" disabled={!currentQ || isLive || showFinalResults}>
+          {!betweenQuestions &&
+            !readyForResults &&
+            !showFinalResults &&
+            !answerReview &&
+            !thankYouPhase &&
+            !feedbackPhase && (
+            <button onClick={handleStart} className="btn-accent text-sm py-2" disabled={!currentQ || isLive}>
               <Play className="w-4 h-4" /> Start
             </button>
           )}

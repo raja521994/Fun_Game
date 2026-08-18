@@ -366,16 +366,16 @@ export default function ParticipantPage() {
   if (status === 'answer_review' && answerReview) {
     const r = answerReview;
     return (
-      <div className="flex-1 flex flex-col bg-slate-900 text-white min-h-dvh px-3 py-4 overflow-hidden">
-        <p className="text-center text-white/40 text-[10px] uppercase tracking-widest mb-2 shrink-0">
+      <div className="flex-1 flex flex-col items-center justify-center bg-slate-900 text-white min-h-dvh px-3 py-4 overflow-y-auto">
+        <p className="text-center text-white/40 text-[10px] uppercase tracking-widest mb-2">
           Answer key · {(r.index ?? 0) + 1} of {r.total || '?'}
         </p>
-        <div className="w-full max-w-md mx-auto flex-1 min-h-0 flex flex-col bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-4 py-3 text-white shrink-0">
+        <div className="w-full max-w-md mx-auto flex flex-col bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-4 py-3 text-white">
             <p className="text-[10px] uppercase tracking-wider text-white/70 mb-0.5">Question</p>
-            <h2 className="font-display text-base font-bold leading-snug line-clamp-4">{r.questionText}</h2>
+            <h2 className="font-display text-base font-bold leading-snug">{r.questionText}</h2>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+          <div className="p-3 space-y-2">
             {(r.options || []).map((o, i) => (
               <div
                 key={i}
