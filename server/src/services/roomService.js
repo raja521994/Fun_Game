@@ -21,8 +21,9 @@ function createRoom(title = 'Fun Game Session', ownerUserId = null) {
     owner_user_id: ownerUserId || null,
     reveal_answers_at_end: 1,
     feedback_enabled: 0,
-    thank_you_message: 'Thank you for playing!
-We appreciate your time and feedback.',
+    thank_you_message: `Thank you for playing!
+
+  We appreciate your time and feedback.`,
     created_at: new Date().toISOString(),
     ended_at: null,
   };
