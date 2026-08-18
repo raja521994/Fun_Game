@@ -626,7 +626,7 @@ export default function HostPage() {
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-hidden px-4 py-3 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden px-4 py-2 pb-1 flex flex-col">
           {showLobby && (
             <div className="flex-1 min-h-0 flex flex-row items-center justify-center gap-8">
               <JoinCard />
@@ -696,21 +696,21 @@ export default function HostPage() {
           )}
 
           {isLive && (
-            <div className="flex-1 min-h-0 flex flex-col gap-2 max-w-6xl mx-auto w-full">
+            <div className="flex-1 min-h-0 flex flex-col gap-2 max-w-7xl mx-auto w-full h-full">
               <div className="flex items-start gap-3 shrink-0">
                 <div className="flex-1 min-w-0">
-                  <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">
+                  <p className="text-white/40 text-[10px] uppercase tracking-wider mb-0.5">
                     Question {currentIndex + 1} of {gameQuestions.length}
                   </p>
-                  <h1 className="font-display text-xl md:text-3xl font-bold leading-snug line-clamp-3">
+                  <h1 className="font-display text-lg md:text-2xl lg:text-3xl font-bold leading-snug line-clamp-2">
                     {(activeQuestion || currentQ)?.question_text}
                   </h1>
                 </div>
                 <JoinCard compact />
               </div>
-              <div className="flex-1 min-h-0 bg-white text-slate-900 rounded-2xl p-4 md:p-6 shadow-2xl overflow-hidden flex flex-col">
+              <div className="flex-1 min-h-0 bg-white text-slate-900 rounded-2xl p-3 md:p-5 shadow-2xl overflow-hidden flex flex-col">
                 {liveChartResults ? (
-                  <div className="flex-1 min-h-0">
+                  <div className="flex-1 min-h-0 w-full h-full">
                     <ResultsChart results={liveChartResults} presentMode />
                   </div>
                 ) : (
@@ -789,63 +789,67 @@ export default function HostPage() {
             const correctText = correct?.option_text || correct?.text || '—';
             const opts = q.options || [];
             return (
-              <div className="flex-1 min-h-0 flex flex-col items-center justify-center max-w-3xl mx-auto w-full px-2">
-                <p className="text-white/40 text-[10px] uppercase tracking-widest mb-2">
+              <div className="flex-1 min-h-0 flex flex-col items-center justify-center max-w-2xl mx-auto w-full px-2 py-1 overflow-y-auto">
+                <p className="text-white/40 text-[10px] uppercase tracking-widest mb-2 shrink-0">
                   Answer key · {reviewIndex + 1} of {quizQuestions.length}
                 </p>
-                <div className="w-full bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-3xl shadow-2xl overflow-hidden border border-white/10">
-                  <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-6 py-4 text-white">
-                    <p className="text-xs uppercase tracking-wider text-white/70 mb-1">Question</p>
-                    <h2 className="font-display text-xl md:text-2xl font-bold leading-snug">
+                <div className="w-full flex flex-col bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-2xl shadow-2xl border border-white/10 overflow-hidden max-h-full">
+                  <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-4 md:px-5 py-3 text-white shrink-0">
+                    <p className="text-[10px] uppercase tracking-wider text-white/70 mb-0.5">Question</p>
+                    <h2 className="font-display text-base md:text-lg lg:text-xl font-bold leading-snug">
                       {q.question_text}
                     </h2>
                   </div>
-                  <div className="p-6 md:p-8 space-y-3">
+                  <div className="px-3 md:px-5 py-3 space-y-2 overflow-y-auto">
                     {opts.map((o, i) => {
                       const isCorrect = o.id === q.correct_option_id;
                       const label = o.option_text || o.text;
                       return (
                         <div
                           key={o.id || i}
-                          className={`flex items-center gap-3 rounded-2xl px-4 py-3.5 border-2 transition-all duration-500 ${
+                          className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border-2 ${
                             isCorrect
-                              ? 'border-emerald-500 bg-emerald-50 shadow-lg shadow-emerald-500/20 scale-[1.02]'
-                              : 'border-slate-100 bg-slate-50 opacity-60'
+                              ? 'border-emerald-500 bg-emerald-50 shadow-md shadow-emerald-500/15'
+                              : 'border-slate-100 bg-slate-50 opacity-70'
                           }`}
                         >
                           <span
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+                            className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
                               isCorrect ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'
                             }`}
                           >
                             {isCorrect ? '✓' : String.fromCharCode(65 + i)}
                           </span>
-                          <span className={`flex-1 font-medium ${isCorrect ? 'text-emerald-900' : 'text-slate-600'}`}>
+                          <span
+                            className={`flex-1 text-sm md:text-base font-medium break-words ${
+                              isCorrect ? 'text-emerald-900' : 'text-slate-600'
+                            }`}
+                          >
                             {label}
                           </span>
                           {isCorrect && (
-                            <span className="text-xs font-bold uppercase tracking-wide text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
                               Correct
                             </span>
                           )}
                         </div>
                       );
                     })}
-                    <div className="mt-4 text-center">
-                      <p className="text-sm text-slate-500">The correct answer is</p>
-                      <p className="font-display text-2xl md:text-3xl font-bold text-emerald-600 mt-1 animate-fade-in">
-                        {correctText}
-                      </p>
-                    </div>
+                  </div>
+                  <div className="shrink-0 border-t border-emerald-100 bg-emerald-50/80 px-4 py-2.5 text-center">
+                    <p className="text-[11px] text-slate-500">The correct answer is</p>
+                    <p className="font-display text-base md:text-lg font-bold text-emerald-600 mt-0.5 break-words">
+                      {correctText}
+                    </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 mt-5">
+                <div className="flex items-center gap-3 mt-3 shrink-0">
                   {reviewIndex < quizQuestions.length - 1 ? (
-                    <button type="button" onClick={goNext} className="btn-accent px-6 py-2.5">
+                    <button type="button" onClick={goNext} className="btn-accent px-5 py-2 text-sm">
                       Next answer →
                     </button>
                   ) : room?.feedbackEnabled && fbQuestions.length > 0 ? (
-                    <button type="button" onClick={startThankYouPhase} className="btn-accent px-6 py-2.5">
+                    <button type="button" onClick={startThankYouPhase} className="btn-accent px-5 py-2 text-sm">
                       Continue →
                     </button>
                   ) : (
@@ -858,8 +862,13 @@ export default function HostPage() {
         </div>
 
         <div className="flex justify-center items-center gap-2 py-2.5 bg-black/30 shrink-0 h-14">
-          {!betweenQuestions && !readyForResults && (
-            <button onClick={handleStart} className="btn-accent text-sm py-2" disabled={!currentQ || isLive || showFinalResults}>
+          {!betweenQuestions &&
+            !readyForResults &&
+            !showFinalResults &&
+            !answerReview &&
+            !thankYouPhase &&
+            !feedbackPhase && (
+            <button onClick={handleStart} className="btn-accent text-sm py-2" disabled={!currentQ || isLive}>
               <Play className="w-4 h-4" /> Start
             </button>
           )}

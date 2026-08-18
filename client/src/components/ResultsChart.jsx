@@ -94,22 +94,31 @@ function LiveBars({ data, presentMode }) {
 /** Vertical colorful bars (present / multi-option) */
 function VerticalBars({ data, presentMode }) {
   return (
-    <div className="w-full" style={{ height: presentMode ? 240 : 200 }}>
+    <div className={`w-full ${presentMode ? 'h-full min-h-[200px]' : ''}`} style={presentMode ? undefined : { height: 200 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} margin={{ top: 24, right: 8, left: 0, bottom: 8 }}>
+        <BarChart
+          data={data}
+          margin={{ top: presentMode ? 16 : 24, right: 12, left: 4, bottom: presentMode ? 12 : 8 }}
+        >
           <XAxis
             dataKey="name"
             interval={0}
-            tick={{ fontSize: presentMode ? 12 : 11, fill: '#475569' }}
+            tick={{ fontSize: presentMode ? 13 : 11, fill: '#475569' }}
             angle={data.length > 4 ? -20 : 0}
             textAnchor={data.length > 4 ? 'end' : 'middle'}
-            height={data.length > 4 ? 50 : 30}
+            height={data.length > 4 ? 56 : 36}
           />
           <YAxis allowDecimals={false} hide />
           <Tooltip
             formatter={(v, _n, props) => [`${v} (${props.payload.percentage}%)`, 'Votes']}
           />
-          <Bar dataKey="count" radius={[8, 8, 0, 0]} maxBarSize={72} isAnimationActive animationDuration={400}>
+          <Bar
+            dataKey="count"
+            radius={[10, 10, 0, 0]}
+            maxBarSize={presentMode ? 96 : 72}
+            isAnimationActive
+            animationDuration={400}
+          >
             {data.map((_, i) => (
               <Cell key={i} fill={COLORS[i % COLORS.length]} />
             ))}
@@ -172,37 +181,39 @@ export default function ResultsChart({ results, presentMode = false }) {
     const hasVotes = data.some((d) => d.count > 0);
     if (hasVotes) {
       return (
-        <div className="w-full">
-          <ResponsiveContainer width="100%" height={presentMode ? 260 : 220}>
-            <PieChart>
-              <Pie
-                data={data}
-                dataKey="count"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={presentMode ? 110 : 90}
-                paddingAngle={2}
-                stroke="#fff"
-                strokeWidth={3}
-                label={PieLabel}
-                labelLine={false}
-                isAnimationActive
-                animationDuration={400}
-              >
-                {data.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                formatter={(v, _n, props) => [
-                  `${v} (${props.payload.percentage}%)`,
-                  props.payload.name,
-                ]}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 mt-1">
+        <div className={`w-full ${presentMode ? 'h-full min-h-0 flex flex-col' : ''}`}>
+          <div className={presentMode ? 'flex-1 min-h-[200px] w-full' : 'w-full h-[220px]'}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="count"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={presentMode ? '70%' : 90}
+                  paddingAngle={2}
+                  stroke="#fff"
+                  strokeWidth={3}
+                  label={PieLabel}
+                  labelLine={false}
+                  isAnimationActive
+                  animationDuration={400}
+                >
+                  {data.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(v, _n, props) => [
+                    `${v} (${props.payload.percentage}%)`,
+                    props.payload.name,
+                  ]}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 pt-2 shrink-0">
             {data.map((d, i) => (
               <div key={i} className="flex items-center gap-2 text-sm">
                 <span
@@ -220,15 +231,19 @@ export default function ResultsChart({ results, presentMode = false }) {
       );
     }
     // Zero votes: show empty tracks for Yes / No
-    return <LiveBars data={data} presentMode={presentMode} />;
+    return (
+      <div className={presentMode ? 'h-full flex items-center' : ''}>
+        <LiveBars data={data} presentMode={presentMode} />
+      </div>
+    );
   }
 
   // —— Rating ——
   if (type === 'rating' || type === 'feedback') {
     return (
-      <div className="w-full">
+      <div className={`w-full ${presentMode ? 'h-full flex flex-col justify-center' : ''}`}>
         {average != null && (
-          <div className="text-center mb-4">
+          <div className="text-center mb-4 shrink-0">
             <div className={`font-display font-bold text-brand-600 ${presentMode ? 'text-5xl' : 'text-3xl'}`}>
               {Number(average).toFixed(1)}
             </div>
@@ -246,9 +261,11 @@ export default function ResultsChart({ results, presentMode = false }) {
   // Present: vertical bars when few options look good; else horizontal live bars
   if (presentMode && data.length <= 6) {
     return (
-      <div className="w-full">
-        <VerticalBars data={data} presentMode />
-        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-2">
+      <div className="w-full h-full min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0">
+          <VerticalBars data={data} presentMode />
+        </div>
+        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 pt-2 shrink-0">
           {data.map((d, i) => (
             <span key={i} className="text-xs text-slate-500 tabular-nums">
               <span
