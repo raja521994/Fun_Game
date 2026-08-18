@@ -76,6 +76,9 @@ function getHostRoom(req, res) {
         roomCode: room.room_code,
         status: room.status,
         title: room.title,
+        revealAnswersAtEnd: room.reveal_answers_at_end !== 0 && room.reveal_answers_at_end !== false,
+        feedbackEnabled: !!(room.feedback_enabled === 1 || room.feedback_enabled === true),
+        thankYouMessage: room.thank_you_message || 'Thank you for playing!',
       },
       participants,
       questions,
@@ -110,13 +113,41 @@ function exportResults(req, res) {
     const room = roomService.getRoomByHostToken(token);
     if (!room) return res.status(404).json({ error: 'Room not found' });
 
-    const csv = questionService.exportCsv(room.id);
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="fun-game-${room.room_code}.csv"`);
-    res.send(csv);
+    const buf = questionService.exportExcel(room.id);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="fun-game-${room.room_code}.xlsx"`);
+    res.send(Buffer.from(buf));
   } catch (err) {
     console.error('exportResults error:', err);
     res.status(500).json({ error: 'Failed to export results' });
+  }
+}
+
+function updateSettings(req, res) {
+  try {
+    const token = req.headers['x-host-token'] || req.body.hostToken;
+    const room = roomService.getRoomByHostToken(token);
+    if (!room) return res.status(404).json({ error: 'Room not found' });
+    const updated = roomService.updateRoomSettings(room.id, {
+      revealAnswersAtEnd: req.body.revealAnswersAtEnd,
+      feedbackEnabled: req.body.feedbackEnabled,
+      thankYouMessage: req.body.thankYouMessage,
+    });
+    res.json({
+      success: true,
+      room: {
+        id: updated.id,
+        roomCode: updated.room_code,
+        status: updated.status,
+        title: updated.title,
+        revealAnswersAtEnd: updated.reveal_answers_at_end !== 0 && updated.reveal_answers_at_end !== false,
+        feedbackEnabled: !!(updated.feedback_enabled === 1 || updated.feedback_enabled === true),
+        thankYouMessage: updated.thank_you_message || 'Thank you for playing!',
+      },
+    });
+  } catch (err) {
+    console.error('updateSettings error:', err);
+    res.status(500).json({ error: 'Failed to update settings' });
   }
 }
 
@@ -149,4 +180,6 @@ module.exports = {
   endRoom,
   exportResults,
   deleteRoom,
+  updateSettings,
 };
+

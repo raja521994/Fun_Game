@@ -12,16 +12,21 @@ function createRoom(title = 'Fun Game Session', ownerUserId = null) {
   }
   if (attempts >= 20) throw new Error('Could not generate unique room code');
 
-  const room = {
-    id: generateId(),
-    room_code: roomCode,
-    host_token: generateToken(),
-    status: 'waiting',
-    title: title || 'Fun Game Session',
-    owner_user_id: ownerUserId || null,
-    created_at: new Date().toISOString(),
-    ended_at: null,
-  };
+const room = {
+  id: generateId(),
+  room_code: roomCode,
+  host_token: generateToken(),
+  status: 'waiting',
+  title: title || 'Fun Game Session',
+  owner_user_id: ownerUserId || null,
+  reveal_answers_at_end: 1,
+  feedback_enabled: 0,
+  thank_you_message: `Thank you for playing!
+
+We appreciate your time and feedback.`,
+  created_at: new Date().toISOString(),
+  ended_at: null,
+};
   insert('rooms', room);
   return {
     id: room.id,
@@ -30,7 +35,25 @@ function createRoom(title = 'Fun Game Session', ownerUserId = null) {
     status: room.status,
     title: room.title,
     ownerUserId: room.owner_user_id,
+    revealAnswersAtEnd: true,
+    feedbackEnabled: false,
   };
+}
+
+function updateRoomSettings(roomId, settings = {}) {
+  const patch = {};
+  if (typeof settings.revealAnswersAtEnd === 'boolean') {
+    patch.reveal_answers_at_end = settings.revealAnswersAtEnd ? 1 : 0;
+  }
+  if (typeof settings.feedbackEnabled === 'boolean') {
+    patch.feedback_enabled = settings.feedbackEnabled ? 1 : 0;
+  }
+  if (typeof settings.thankYouMessage === 'string') {
+    patch.thank_you_message = settings.thankYouMessage.slice(0, 1000);
+  }
+  if (!Object.keys(patch).length) return getRoomById(roomId);
+  update('rooms', (r) => r.id === roomId, patch);
+  return getRoomById(roomId);
 }
 
 function listRoomsByOwner(userId) {
@@ -119,6 +142,7 @@ module.exports = {
   getRoomById,
   getRoomByHostToken,
   updateRoomStatus,
+  updateRoomSettings,
   getParticipantCount,
   getOnlineCount,
   deleteRoom,

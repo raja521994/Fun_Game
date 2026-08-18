@@ -20,6 +20,11 @@ export default function ParticipantPage() {
   const [scoreInfo, setScoreInfo] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [answerReview, setAnswerReview] = useState(null);
+  const [feedbackQuestions, setFeedbackQuestions] = useState([]);
+  const [feedbackAnswers, setFeedbackAnswers] = useState({});
+  const [feedbackDone, setFeedbackDone] = useState(false);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [thankYouMessage, setThankYouMessage] = useState('Thank you for playing!');
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -71,7 +76,7 @@ export default function ParticipantPage() {
       setStatus((s) => (s === 'active' || s === 'answered' ? 'waiting' : s));
     };
 
-    const onPresentPhase = ({ phase, leaderboard: lb, review }) => {
+    const onPresentPhase = ({ phase, leaderboard: lb, review, feedbackQuestions: fbqs, thankYouMessage }) => {
       if (lb) setLeaderboard(lb);
       if (phase === 'between') {
         setAnswerReview(null);
@@ -88,6 +93,18 @@ export default function ParticipantPage() {
       } else if (phase === 'answer_review') {
         setAnswerReview(review || null);
         setStatus('answer_review');
+        setTimerLeft(null);
+      } else if (phase === 'thank_you') {
+        setAnswerReview(null);
+        setThankYouMessage(thankYouMessage || 'Thank you for playing!');
+        setStatus('thank_you');
+        setTimerLeft(null);
+      } else if (phase === 'feedback') {
+        setAnswerReview(null);
+        setFeedbackQuestions(fbqs || []);
+        setFeedbackAnswers({});
+        setFeedbackDone(false);
+        setStatus('feedback');
         setTimerLeft(null);
       } else if (phase === 'live') {
         setAnswerReview(null);
@@ -163,6 +180,27 @@ export default function ParticipantPage() {
       setError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const submitFeedback = async () => {
+    if (feedbackSubmitting || feedbackDone) return;
+    const entries = Object.entries(feedbackAnswers);
+    if (entries.length < feedbackQuestions.length) {
+      setError('Please answer all feedback questions');
+      return;
+    }
+    setFeedbackSubmitting(true);
+    setError('');
+    try {
+      for (const [questionId, optionId] of entries) {
+        await emitWithAck('submit_answer', { questionId, optionId });
+      }
+      setFeedbackDone(true);
+    } catch (err) {
+      setError(err.message || 'Could not submit feedback');
+    } finally {
+      setFeedbackSubmitting(false);
     }
   };
 
@@ -245,7 +283,86 @@ export default function ParticipantPage() {
     );
   }
 
+  if (status === 'thank_you') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center px-6 text-center bg-slate-900 text-white min-h-dvh">
+        <div className="text-5xl mb-4 select-none" aria-hidden>🙏</div>
+        
+        <h1 className="font-display text-2xl sm:text-3xl font-bold whitespace-pre-line leading-snug max-w-md">
+          {thankYouMessage}
+        </h1>
+        <p className="text-white/50 text-sm mt-6">Please wait for the host…</p>
+      </div>
+    );
+  }
+
+  // Feedback form (after scores / answer reveal)
+  if (status === 'feedback') {
+    return (
+      <div className="flex-1 flex flex-col bg-slate-50 min-h-dvh">
+        <header className="px-4 py-3 border-b border-slate-100 bg-white">
+          <p className="text-xs text-slate-400">Playing as <strong className="text-slate-700">{name}</strong></p>
+          <h1 className="font-display font-bold text-slate-900">Session feedback</h1>
+        </header>
+        <main className="flex-1 px-4 py-6 max-w-lg mx-auto w-full space-y-6">
+          {feedbackDone ? (
+            <div className="text-center py-12">
+              <CheckCircle2 className="w-14 h-14 text-accent-500 mx-auto mb-3" />
+              <h2 className="font-display text-xl font-bold text-slate-800">Thank you!</h2>
+              <p className="text-slate-500 text-sm mt-1">Your feedback was submitted</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-slate-500">Rate each item from 1 (low) to 5 (high)</p>
+              {feedbackQuestions.map((q, qi) => (
+                <div key={q.id} className="card p-4 space-y-3">
+                  <p className="font-medium text-slate-800">
+                    <span className="text-slate-400 mr-1">{qi + 1}.</span>
+                    {q.questionText}
+                  </p>
+                  <div className="flex gap-2 justify-between">
+                    {(q.options || []).map((o) => (
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() =>
+                          setFeedbackAnswers((prev) => ({ ...prev, [q.id]: o.id }))
+                        }
+                        className={`flex-1 py-3 rounded-xl font-bold text-sm border-2 transition ${
+                          feedbackAnswers[q.id] === o.id
+                            ? 'border-brand-500 bg-brand-50 text-brand-800'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        {o.text}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {feedbackQuestions.length === 0 && (
+                <p className="text-center text-slate-400 py-8">Waiting for feedback questions…</p>
+              )}
+              {feedbackQuestions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={submitFeedback}
+                  disabled={feedbackSubmitting}
+                  className="btn-primary w-full py-3"
+                >
+                  {feedbackSubmitting ? 'Submitting…' : 'Submit feedback'}
+                </button>
+              )}
+              {error && <p className="text-sm text-red-600 text-center">{error}</p>}
+            </>
+          )}
+        </main>
+      </div>
+    );
+  }
+
   // Correct answer reveal (synced with host)
+
   if (status === 'answer_review' && answerReview) {
     const r = answerReview;
     return (

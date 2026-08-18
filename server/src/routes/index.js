@@ -27,6 +27,7 @@ router.post('/rooms/delete', requireAuth, roomController.deleteRoom);
 router.get('/rooms/code/:code', joinLimiter, roomController.getRoomByCode);
 router.get('/rooms/host/:token', roomController.getHostRoom);
 router.post('/rooms/end', roomController.endRoom);
+router.post('/rooms/settings', roomController.updateSettings);
 router.get('/rooms/export', roomController.exportResults);
 
 // Questions (host token)

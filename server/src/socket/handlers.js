@@ -295,6 +295,32 @@ function registerSocketHandlers(io) {
         if (phase === 'answer_review' && review) {
           payload.review = review;
         }
+        if (phase === 'thank_you') {
+          const room = roomService.getRoomById(roomId);
+          payload.thankYouMessage = room?.thank_you_message || 'Thank you for playing!';
+        }
+        if (phase === 'feedback') {
+          const qs = questionService.getQuestionsByRoom(roomId).filter((q) => q.type === 'feedback');
+          // Mark feedback questions active so answers are accepted
+          for (const q of qs) {
+            try {
+              if (q.status !== 'active') {
+                const { update } = require('../database/db');
+                update('questions', (row) => row.id === q.id, {
+                  status: 'active',
+                  is_active: 1,
+                });
+              }
+            } catch (e) {
+              /* continue */
+            }
+          }
+          payload.feedbackQuestions = qs.map((q) => ({
+            id: q.id,
+            questionText: q.question_text,
+            options: (q.options || []).map((o) => ({ id: o.id, text: o.option_text })),
+          }));
+        }
         io.to(`room:${roomId}`).emit('present_phase', payload);
         callback?.({ success: true });
       } catch (err) {

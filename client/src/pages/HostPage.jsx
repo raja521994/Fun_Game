@@ -15,6 +15,7 @@ import {
   Check,
   Trash2,
   LogOut,
+  Save,
 } from 'lucide-react';
 import api from '../services/api';
 import { connectSocket, emitWithAck, getSocket } from '../services/socket';
@@ -44,6 +45,12 @@ export default function HostPage() {
   const [readyForResults, setReadyForResults] = useState(false);
   const [answerReview, setAnswerReview] = useState(false);
   const [reviewIndex, setReviewIndex] = useState(0);
+  const [feedbackPhase, setFeedbackPhase] = useState(false);
+  const [thankYouPhase, setThankYouPhase] = useState(false);
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [thankYouDraft, setThankYouDraft] = useState('');
+  const [saveMsg, setSaveMsg] = useState('');
+  const [saving, setSaving] = useState(false);
   const startedAtRef = useRef(null);
   const timerRef = useRef(null);
   const [timerLeft, setTimerLeft] = useState(null);
@@ -73,7 +80,7 @@ export default function HostPage() {
   }, []);
 
   const startQuestionByIndex = useCallback(async (index) => {
-    const list = questionsRef.current;
+    const list = questionsRef.current.filter((q) => q.type !== 'feedback');
     const q = list[index];
     if (!q) return;
     try {
@@ -104,7 +111,7 @@ export default function HostPage() {
       }
 
       const idx = currentIndexRef.current;
-      const list = questionsRef.current;
+      const list = questionsRef.current.filter((q) => q.type !== 'feedback');
       const nextIdx = idx + 1;
 
       setActiveQuestion((q) => (q ? { ...q, status: 'stopped', is_active: 0 } : q));
@@ -142,6 +149,7 @@ export default function HostPage() {
       const res = await emitWithAck('host_join', { hostToken: token });
       setRoom(res.room);
       if (res.room) {
+        setThankYouDraft(res.room.thankYouMessage || 'Thank you for playing!\nWe appreciate your time and feedback.');
         upsertHostRoom({
           hostToken: token,
           roomCode: res.room.roomCode || res.room.code,
@@ -244,7 +252,11 @@ export default function HostPage() {
       const q = await api.createQuestion(token, data);
       setQuestions((prev) => [...prev, q]);
       setShowForm(false);
-      setCurrentIndex(questions.length);
+      setShowFeedbackForm(false);
+      // Only advance selection for normal (non-feedback) questions
+      if (q.type !== 'feedback') {
+        setCurrentIndex(questions.filter((x) => x.type !== 'feedback').length);
+      }
     } catch (err) {
       alert(err.message);
     } finally {
@@ -265,7 +277,7 @@ export default function HostPage() {
 
       if (presentModeRef.current) {
         const idx = currentIndexRef.current;
-        const list = questionsRef.current;
+        const list = questionsRef.current.filter((q) => q.type !== 'feedback');
         const nextIdx = idx + 1;
         setResults(null);
         setAnswerStatus([]);
@@ -340,7 +352,9 @@ export default function HostPage() {
   };
 
   const onlineCount = participants.filter((p) => p.is_online).length;
-  const currentQ = questions[currentIndex] || null;
+  const gameQuestions = questions.filter((q) => q.type !== 'feedback');
+  const feedbackQuestions = questions.filter((q) => q.type === 'feedback');
+  const currentQ = gameQuestions[currentIndex] || null;
   const isLive = activeQuestion?.status === 'active';
 
   if (loading) {
@@ -360,6 +374,61 @@ export default function HostPage() {
     );
   }
 
+  const handleSaveRoom = async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      // Persist thank-you text and current room flags
+      if (room?.feedbackEnabled) {
+        await api.updateRoomSettings(token, {
+          thankYouMessage: thankYouDraft,
+          feedbackEnabled: true,
+          revealAnswersAtEnd: room?.revealAnswersAtEnd !== false,
+        });
+      } else {
+        await api.updateRoomSettings(token, {
+          revealAnswersAtEnd: room?.revealAnswersAtEnd !== false,
+          feedbackEnabled: false,
+          thankYouMessage: thankYouDraft,
+        });
+      }
+
+      // Reload from server to confirm questions are stored
+      const res = await api.getHostRoom(token);
+      if (res.room) setRoom(res.room);
+      if (res.questions) setQuestions(res.questions);
+      if (res.participants) setParticipants(res.participants);
+
+      const n = (res.questions || []).length;
+      const g = (res.questions || []).filter((q) => q.type !== 'feedback').length;
+      const f = (res.questions || []).filter((q) => q.type === 'feedback').length;
+
+      upsertHostRoom({
+        hostToken: token,
+        roomCode: res.room?.roomCode,
+        roomId: res.room?.id,
+        title: res.room?.title,
+        status: res.room?.status,
+      });
+
+      setSaveMsg(`Saved — ${g} question${g !== 1 ? 's' : ''}${f ? `, ${f} feedback` : ''} stored`);
+      setTimeout(() => setSaveMsg(''), 4000);
+    } catch (err) {
+      setSaveMsg(err.message || 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveRoomSetting = async (patch) => {
+    try {
+      const res = await api.updateRoomSettings(token, patch);
+      if (res.room) setRoom((r) => ({ ...r, ...res.room }));
+    } catch (err) {
+      alert(err.message || 'Could not save setting');
+    }
+  };
+
   // —— PRESENT MODE ——
   if (presentMode) {
     const roomCode = room?.roomCode || '';
@@ -368,7 +437,7 @@ export default function HostPage() {
     const qrSrc = joinUrl
       ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(joinUrl)}`
       : '';
-    const showLobby = !isLive && !showFinalResults && !betweenQuestions && !readyForResults && !answerReview;
+    const showLobby = !isLive && !showFinalResults && !betweenQuestions && !readyForResults && !answerReview && !feedbackPhase && !thankYouPhase;
 
     // Build chart data even with 0 answers
     const liveChartResults = (() => {
@@ -388,9 +457,32 @@ export default function HostPage() {
       };
     })();
 
-    const quizQuestions = questions.filter(
-      (q) => q.is_quiz && q.correct_option_id && (q.options || []).length
-    );
+    const revealAtEnd = room?.revealAnswersAtEnd !== false;
+    const quizQuestions = revealAtEnd
+      ? questions.filter(
+          (q) => q.type !== 'feedback' && q.is_quiz && q.correct_option_id && (q.options || []).length
+        )
+      : [];
+    const fbQuestions = questions.filter((q) => q.type === 'feedback');
+    const startThankYouPhase = () => {
+      setThankYouPhase(true);
+      setFeedbackPhase(false);
+      setShowFinalResults(false);
+      setAnswerReview(false);
+      emitWithAck('present_phase', { phase: 'thank_you' }).catch(() => {});
+    };
+    const startFeedbackPhase = () => {
+      setThankYouPhase(false);
+      setFeedbackPhase(true);
+      setShowFinalResults(false);
+      setAnswerReview(false);
+      emitWithAck('present_phase', { phase: 'feedback' }).catch(() => {});
+    };
+    const maybeStartClosing = () => {
+      if (room?.feedbackEnabled && fbQuestions.length > 0) {
+        startThankYouPhase();
+      }
+    };
 
     const broadcastReview = (idx) => {
       const q = quizQuestions[idx];
@@ -419,12 +511,15 @@ export default function HostPage() {
         emitWithAck('present_phase', { phase: 'final_scores' }).catch(() => {});
         return;
       }
-      if (showFinalResults && !answerReview) {
-        if (quizQuestions.length === 0) return;
-        setAnswerReview(true);
-        setReviewIndex(0);
-        setShowFinalResults(false);
-        broadcastReview(0);
+      if (showFinalResults && !answerReview && !feedbackPhase) {
+        if (quizQuestions.length > 0) {
+          setAnswerReview(true);
+          setReviewIndex(0);
+          setShowFinalResults(false);
+          broadcastReview(0);
+          return;
+        }
+        maybeStartClosing();
         return;
       }
       if (answerReview) {
@@ -432,7 +527,13 @@ export default function HostPage() {
           const next = reviewIndex + 1;
           setReviewIndex(next);
           broadcastReview(next);
+        } else {
+          maybeStartClosing();
         }
+        return;
+      }
+      if (thankYouPhase) {
+        startFeedbackPhase();
         return;
       }
       if (betweenQuestions) {
@@ -507,9 +608,9 @@ export default function HostPage() {
             <span className="text-xs text-white/60 flex items-center gap-1">
               <Users className="w-3.5 h-3.5" /> {onlineCount}
             </span>
-            {questions.length > 0 && (
+            {gameQuestions.length > 0 && !feedbackPhase && (
               <span className="text-xs text-white/50">
-                Q{Math.min(currentIndex + 1, questions.length)}/{questions.length}
+                Q{Math.min(currentIndex + 1, gameQuestions.length)}/{gameQuestions.length}
               </span>
             )}
           </div>
@@ -542,7 +643,7 @@ export default function HostPage() {
               <JoinCard />
               <div className="text-left max-w-lg">
                 <p className="text-white/50 text-xs uppercase tracking-widest mb-2">
-                  Up next · Question {currentIndex + 1} of {questions.length}
+                  Up next · Question {currentIndex + 1} of {gameQuestions.length}
                 </p>
                 <h1 className="font-display text-3xl md:text-4xl font-bold mb-3 leading-tight">
                   Are you ready for the next puzzle?
@@ -599,7 +700,7 @@ export default function HostPage() {
               <div className="flex items-start gap-3 shrink-0">
                 <div className="flex-1 min-w-0">
                   <p className="text-white/40 text-[10px] uppercase tracking-wider mb-1">
-                    Question {currentIndex + 1} of {questions.length}
+                    Question {currentIndex + 1} of {gameQuestions.length}
                   </p>
                   <h1 className="font-display text-xl md:text-3xl font-bold leading-snug line-clamp-3">
                     {(activeQuestion || currentQ)?.question_text}
@@ -632,11 +733,51 @@ export default function HostPage() {
                   <p className="text-center text-slate-400 py-8">No scores yet</p>
                 )}
               </div>
-              {quizQuestions.length > 0 && (
+              {quizQuestions.length > 0 ? (
                 <button type="button" onClick={goNext} className="btn-accent px-6 py-3 shrink-0">
                   Reveal correct answers →
                 </button>
+              ) : room?.feedbackEnabled && fbQuestions.length > 0 ? (
+                <button type="button" onClick={startThankYouPhase} className="btn-accent px-6 py-3 shrink-0">
+                  Continue →
+                </button>
+              ) : null}
+            </div>
+          )}
+
+          {thankYouPhase && !isLive && (
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-6 max-w-2xl mx-auto w-full px-4">
+              <div className="text-6xl select-none" aria-hidden>🙏</div>
+              <div className="text-center space-y-4">
+                
+                <div className="font-display text-2xl md:text-4xl font-bold text-white whitespace-pre-line leading-snug">
+                  {room?.thankYouMessage || 'Thank you for playing!'}
+                </div>
+              </div>
+              {fbQuestions.length > 0 && (
+                <button type="button" onClick={startFeedbackPhase} className="btn-accent px-8 py-3">
+                  Continue to feedback →
+                </button>
               )}
+            </div>
+          )}
+
+          {feedbackPhase && !isLive && (
+            <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 max-w-2xl mx-auto w-full">
+              <p className="text-white/40 text-[10px] uppercase tracking-widest">Feedback</p>
+              <h1 className="font-display text-3xl font-bold text-center">Collecting feedback</h1>
+              <p className="text-white/60 text-sm text-center max-w-md">
+                Participants are answering {fbQuestions.length} feedback question{fbQuestions.length !== 1 ? 's' : ''} on their devices (1–5 ratings).
+              </p>
+              <ul className="w-full bg-white/10 rounded-2xl p-4 space-y-2 max-h-[40vh] overflow-y-auto">
+                {fbQuestions.map((q, i) => (
+                  <li key={q.id} className="text-white/90 text-sm px-3 py-2 rounded-lg bg-white/5">
+                    <span className="text-white/40 mr-2">{i + 1}.</span>
+                    {q.question_text}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-white/40 text-xs">Answers appear on the Feedback sheet in Export Excel</p>
             </div>
           )}
 
@@ -703,6 +844,10 @@ export default function HostPage() {
                     <button type="button" onClick={goNext} className="btn-accent px-6 py-2.5">
                       Next answer →
                     </button>
+                  ) : room?.feedbackEnabled && fbQuestions.length > 0 ? (
+                    <button type="button" onClick={startThankYouPhase} className="btn-accent px-6 py-2.5">
+                      Continue →
+                    </button>
                   ) : (
                     <p className="text-white/50 text-sm">All correct answers revealed</p>
                   )}
@@ -738,6 +883,11 @@ export default function HostPage() {
               Next answer
             </button>
           )}
+          {thankYouPhase && fbQuestions.length > 0 && (
+            <button onClick={startFeedbackPhase} className="btn-accent text-sm py-2">
+              Continue to feedback
+            </button>
+          )}
           <button onClick={handleStop} className="btn bg-white/15 text-white hover:bg-white/25 text-sm py-2" disabled={!isLive}>
             <Square className="w-4 h-4" /> Stop
           </button>
@@ -756,7 +906,7 @@ export default function HostPage() {
               isLive ||
               (showFinalResults && quizQuestions.length === 0) ||
               (answerReview && reviewIndex >= quizQuestions.length - 1) ||
-              (!betweenQuestions && !readyForResults && !showFinalResults && !answerReview && currentIndex >= questions.length - 1)
+              (!betweenQuestions && !readyForResults && !showFinalResults && !answerReview && currentIndex >= gameQuestions.length - 1)
             }
             title="Next"
           >
@@ -802,11 +952,21 @@ export default function HostPage() {
             <Link to="/rooms" className="btn-secondary text-sm">
               My rooms
             </Link>
+            <button
+              type="button"
+              onClick={handleSaveRoom}
+              className="btn-secondary text-sm"
+              disabled={saving}
+              title="Save questions and settings before leaving"
+            >
+              <Save className="w-4 h-4" />
+              {saving ? 'Saving…' : 'Save'}
+            </button>
             <button onClick={() => setPresentMode(true)} className="btn-secondary text-sm">
               <Monitor className="w-4 h-4" /> Present
             </button>
             <a href={api.exportCsvUrl(token)} className="btn-secondary text-sm" download>
-              <Download className="w-4 h-4" /> Export CSV
+              <Download className="w-4 h-4" /> Export Excel
             </a>
             <button onClick={handleEndGame} className="btn-danger text-sm">
               <LogOut className="w-4 h-4" /> End Game
@@ -815,7 +975,58 @@ export default function HostPage() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto w-full px-4 py-6 grid lg:grid-cols-12 gap-6 flex-1">
+      {saveMsg && (
+        <div className="bg-accent-500/10 border-b border-accent-500/20 text-accent-700 text-sm text-center py-2 px-4">
+          {saveMsg}
+        </div>
+      )}
+
+      <div className="max-w-7xl mx-auto w-full px-4 pt-6">
+        <div className="card p-4 mb-4">
+          <h2 className="font-display font-bold text-slate-800 mb-3 text-sm">Room settings</h2>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <label className="flex items-start gap-3 cursor-pointer flex-1">
+              <input
+                type="checkbox"
+                checked={room?.revealAnswersAtEnd !== false}
+                onChange={(e) => saveRoomSetting({ revealAnswersAtEnd: e.target.checked })}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-brand-600"
+              />
+              <span>
+                <span className="text-sm font-medium text-slate-800 block">Reveal correct answers at the end</span>
+                <span className="text-xs text-slate-500">After final scores, show correct answers one-by-one for all quiz questions</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-3 cursor-pointer flex-1">
+              <input
+                type="checkbox"
+                checked={!!room?.feedbackEnabled}
+                onChange={(e) => saveRoomSetting({ feedbackEnabled: e.target.checked })}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-brand-600"
+              />
+              <span>
+                <span className="text-sm font-medium text-slate-800 block">Collect feedback</span>
+                <span className="text-xs text-slate-500">Adds a Feedback Questions section and end-of-game feedback</span>
+              </span>
+            </label>
+          </div>
+          {!!room?.feedbackEnabled && (
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <label className="label">Thank-you message (shown after scores / answer key)</label>
+              <textarea
+                className="input min-h-[80px] text-sm"
+                value={thankYouDraft}
+                onChange={(e) => setThankYouDraft(e.target.value)}
+                onBlur={() => saveRoomSetting({ thankYouMessage: thankYouDraft })}
+                placeholder="Thank you for playing!"
+                maxLength={1000}
+              />
+              <p className="text-[11px] text-slate-400 mt-1">Saved when you leave the field</p>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="max-w-7xl mx-auto w-full px-4 pb-6 grid lg:grid-cols-12 gap-6 flex-1">
         <aside className="lg:col-span-3 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="font-display font-bold text-slate-800">Questions</h2>
@@ -836,7 +1047,9 @@ export default function HostPage() {
                 type="button"
                 onClick={() => { setCurrentIndex(i); setResults(null); setShowFinalResults(false); }}
                 className={`w-full text-left card p-3 transition ${
-                  i === currentIndex ? 'ring-2 ring-brand-500 border-brand-200' : 'hover:border-slate-200'
+                  (q.type !== 'feedback' && gameQuestions.indexOf(q) === currentIndex)
+                    ? 'ring-2 ring-brand-500 border-brand-200'
+                    : 'hover:border-slate-200'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -868,7 +1081,7 @@ export default function HostPage() {
           {currentQ ? (
             <div className="card p-6">
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-2">
-                Question {currentIndex + 1} of {questions.length}
+                Question {currentIndex + 1} of {gameQuestions.length}
                 {timerLeft != null && isLive && (
                   <span className={`ml-3 tabular-nums ${timerLeft <= 5 ? 'text-red-500' : 'text-brand-600'}`}>
                     ⏱ {timerLeft}s
@@ -910,7 +1123,7 @@ export default function HostPage() {
                 <button onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))} className="btn-ghost" disabled={currentIndex <= 0}>
                   <ChevronLeft className="w-4 h-4" /> Prev
                 </button>
-                <button onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))} className="btn-ghost" disabled={currentIndex >= questions.length - 1}>
+                <button onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))} className="btn-ghost" disabled={currentIndex >= gameQuestions.length - 1}>
                   Next <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
@@ -934,6 +1147,55 @@ export default function HostPage() {
             </div>
           )}
         </main>
+
+
+        {!!room?.feedbackEnabled && (
+          <div className="lg:col-span-9 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display font-bold text-slate-800">Feedback questions</h2>
+              <button type="button" onClick={() => setShowFeedbackForm(true)} className="btn-primary text-sm">
+                <Plus className="w-4 h-4" /> Add
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Shown after the thank-you slide. Ratings (1–5) go to the Feedback sheet in Export Excel.
+            </p>
+            {showFeedbackForm && (
+              <QuestionForm
+                feedbackOnly
+                onSubmit={async (data) => {
+                  await handleCreateQuestion({ ...data, type: 'feedback', isQuiz: false });
+                  setShowFeedbackForm(false);
+                }}
+                onCancel={() => setShowFeedbackForm(false)}
+                loading={creatingQ}
+              />
+            )}
+            {feedbackQuestions.length === 0 && !showFeedbackForm ? (
+              <div className="card p-6 text-center text-slate-400 text-sm">
+                No feedback questions yet. Click Add to create a 1–5 rating question.
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {feedbackQuestions.map((q) => (
+                  <li key={q.id} className="card p-3 flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] uppercase tracking-wide text-slate-400">Feedback · 1–5</p>
+                      <p className="font-medium text-slate-800 truncate text-sm">{q.question_text}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteQuestion(q.id)}
+                      className="btn-ghost p-2 text-slate-400 hover:text-red-500"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <aside className="lg:col-span-3">
           <div className="card p-4 sticky top-20">

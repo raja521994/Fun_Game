@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, X } from 'lucide-react';
 
-const TYPES = [
+const BASE_TYPES = [
   { value: 'multiple_choice', label: 'Multiple Choice' },
   { value: 'yes_no', label: 'Yes / No' },
   { value: 'rating', label: 'Rating (1–5)' },
@@ -11,8 +11,18 @@ const TYPES = [
 
 const TIMERS = [0, 5, 10, 15, 30, 60];
 
-export default function QuestionForm({ onSubmit, onCancel, loading }) {
-  const [type, setType] = useState('multiple_choice');
+export default function QuestionForm({
+  onSubmit,
+  onCancel,
+  loading,
+  feedbackEnabled = false,
+  feedbackOnly = false,
+}) {
+  const TYPES = feedbackOnly
+    ? [{ value: 'feedback', label: 'Feedback (1–5)' }]
+    : BASE_TYPES;
+
+  const [type, setType] = useState(feedbackOnly ? 'feedback' : 'multiple_choice');
   const [questionText, setQuestionText] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [isQuiz, setIsQuiz] = useState(false);
@@ -28,11 +38,11 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
     const quizOn = canBeQuiz && isQuiz;
 
     const payload = {
-      type,
+      type: feedbackOnly ? 'feedback' : type,
       questionText: questionText.trim(),
-      isQuiz: quizOn,
-      correctOptionIndex: quizOn ? correctIndex : null,
-      timerSeconds: quizOn || timerSeconds > 0 ? timerSeconds : 0,
+      isQuiz: feedbackOnly ? false : quizOn,
+      correctOptionIndex: feedbackOnly ? null : quizOn ? correctIndex : null,
+      timerSeconds: feedbackOnly ? 0 : quizOn || timerSeconds > 0 ? timerSeconds : 0,
     };
 
     if (type === 'multiple_choice') {
@@ -44,7 +54,6 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
       }
     }
 
-    // yes_no: server creates Yes (0) / No (1); correctOptionIndex selects which is right
     if (type === 'yes_no' && quizOn) {
       payload.correctOptionIndex = correctIndex === 1 ? 1 : 0;
     }
@@ -66,7 +75,9 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
   return (
     <form onSubmit={handleSubmit} className="card p-6 space-y-5 animate-slide-up">
       <div className="flex items-center justify-between">
-        <h3 className="font-display font-bold text-lg text-slate-800">New Question</h3>
+        <h3 className="font-display font-bold text-lg text-slate-800">
+          {feedbackOnly ? 'New feedback question' : 'New Question'}
+        </h3>
         {onCancel && (
           <button type="button" onClick={onCancel} className="btn-ghost p-1.5">
             <X className="w-5 h-5" />
@@ -74,41 +85,59 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
         )}
       </div>
 
-      <div>
-        <label className="label">Type</label>
-        <div className="flex flex-wrap gap-2">
-          {TYPES.map((t) => (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => {
-                setType(t.value);
-                if (t.value !== 'multiple_choice' && t.value !== 'yes_no') setIsQuiz(false);
-                if (t.value === 'yes_no') setCorrectIndex(0);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                type === t.value
-                  ? 'bg-brand-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+      {!feedbackOnly && (
+        <div>
+          <label className="label">Type</label>
+          <div className="flex flex-wrap gap-2">
+            {TYPES.map((t) => (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => {
+                  setType(t.value);
+                  if (t.value !== 'multiple_choice' && t.value !== 'yes_no') setIsQuiz(false);
+                  if (t.value === 'yes_no') setCorrectIndex(0);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                  type === t.value
+                    ? 'bg-brand-600 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+      {feedbackOnly && (
+        <p className="text-xs text-slate-500 rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
+          Rating scale 1–5 · Shown to the audience after the thank-you message
+        </p>
+      )}
 
       <div>
         <label className="label">Question</label>
         <textarea
           className="input min-h-[80px] resize-y"
-          placeholder="What do you want to ask?"
+          placeholder={
+            type === 'feedback'
+              ? 'e.g. How would you rate this session overall?'
+              : 'What do you want to ask?'
+          }
           value={questionText}
           onChange={(e) => setQuestionText(e.target.value)}
           maxLength={500}
           required
         />
       </div>
+
+      {(type === 'rating' || type === 'feedback') && (
+        <div className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 text-sm text-slate-600">
+          Participants pick a score from <strong>1</strong> to <strong>5</strong>
+          {type === 'feedback' ? ' for feedback (no right/wrong).' : '.'}
+        </div>
+      )}
 
       {type === 'multiple_choice' && (
         <div>
@@ -127,9 +156,7 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
                         : 'border-slate-300 hover:border-accent-400'
                     }`}
                   >
-                    {correctIndex === i && (
-                      <span className="w-2 h-2 rounded-full bg-white" />
-                    )}
+                    {correctIndex === i && <span className="w-2 h-2 rounded-full bg-white" />}
                   </button>
                 )}
                 <input
@@ -158,11 +185,6 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
               <Plus className="w-4 h-4" /> Add option
             </button>
           )}
-          {isQuiz && (
-            <p className="text-xs text-slate-500 mt-2">
-              Click the circle next to an option to mark the correct answer
-            </p>
-          )}
         </div>
       )}
 
@@ -190,9 +212,7 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
                         : 'border-slate-300 hover:border-accent-400'
                     }`}
                   >
-                    {correctIndex === i && (
-                      <span className="w-2 h-2 rounded-full bg-white" />
-                    )}
+                    {correctIndex === i && <span className="w-2 h-2 rounded-full bg-white" />}
                   </button>
                 ) : (
                   <span
@@ -207,28 +227,20 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
               </div>
             ))}
           </div>
-          {isQuiz ? (
-            <p className="text-xs text-slate-500 mt-2">
-              Select Yes or No as the correct answer (not defaulted — you choose)
-            </p>
-          ) : (
-            <p className="text-xs text-slate-500 mt-2">
-              Enable Quiz mode below if this has a correct Yes/No answer
-            </p>
-          )}
         </div>
       )}
 
       {canBeQuiz && (
-        <label className="flex items-center gap-2 cursor-pointer">
+        <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-slate-200 p-4 bg-slate-50/80">
           <input
             type="checkbox"
             checked={isQuiz}
             onChange={(e) => setIsQuiz(e.target.checked)}
-            className="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+            className="mt-0.5 w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
           />
-          <span className="text-sm font-medium text-slate-700">
-            Quiz mode (score correct answers)
+          <span>
+            <span className="text-sm font-medium text-slate-800 block">Quiz mode</span>
+            <span className="text-xs text-slate-500">Score correct answers on the leaderboard</span>
           </span>
         </label>
       )}
@@ -266,3 +278,4 @@ export default function QuestionForm({ onSubmit, onCancel, loading }) {
     </form>
   );
 }
+
