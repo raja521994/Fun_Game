@@ -480,3 +480,4 @@ function sanitizeResultsForParticipants(results, question) {
 }
 
 module.exports = { registerSocketHandlers };
+

@@ -530,3 +530,4 @@ export default function ParticipantPage() {
     </div>
   );
 }
+

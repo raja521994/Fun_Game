@@ -12,21 +12,21 @@ function createRoom(title = 'Fun Game Session', ownerUserId = null) {
   }
   if (attempts >= 20) throw new Error('Could not generate unique room code');
 
-  const room = {
-    id: generateId(),
-    room_code: roomCode,
-    host_token: generateToken(),
-    status: 'waiting',
-    title: title || 'Fun Game Session',
-    owner_user_id: ownerUserId || null,
-    reveal_answers_at_end: 1,
-    feedback_enabled: 0,
-    thank_you_message: `Thank you for playing!
+const room = {
+  id: generateId(),
+  room_code: roomCode,
+  host_token: generateToken(),
+  status: 'waiting',
+  title: title || 'Fun Game Session',
+  owner_user_id: ownerUserId || null,
+  reveal_answers_at_end: 1,
+  feedback_enabled: 0,
+  thank_you_message: `Thank you for playing!
 
-  We appreciate your time and feedback.`,
-    created_at: new Date().toISOString(),
-    ended_at: null,
-  };
+We appreciate your time and feedback.`,
+  created_at: new Date().toISOString(),
+  ended_at: null,
+};
   insert('rooms', room);
   return {
     id: room.id,
