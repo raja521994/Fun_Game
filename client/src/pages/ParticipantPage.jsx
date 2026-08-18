@@ -366,23 +366,23 @@ export default function ParticipantPage() {
   if (status === 'answer_review' && answerReview) {
     const r = answerReview;
     return (
-      <div className="flex-1 flex flex-col bg-slate-900 text-white min-h-dvh px-4 py-8">
-        <p className="text-center text-white/40 text-[10px] uppercase tracking-widest mb-3">
+      <div className="flex-1 flex flex-col bg-slate-900 text-white min-h-dvh px-3 py-4 overflow-hidden">
+        <p className="text-center text-white/40 text-[10px] uppercase tracking-widest mb-2 shrink-0">
           Answer key · {(r.index ?? 0) + 1} of {r.total || '?'}
         </p>
-        <div className="w-full max-w-md mx-auto bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-3xl shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-5 py-4 text-white">
-            <p className="text-xs uppercase tracking-wider text-white/70 mb-1">Question</p>
-            <h2 className="font-display text-lg font-bold leading-snug">{r.questionText}</h2>
+        <div className="w-full max-w-md mx-auto flex-1 min-h-0 flex flex-col bg-gradient-to-br from-white to-slate-50 text-slate-900 rounded-2xl shadow-2xl overflow-hidden">
+          <div className="bg-gradient-to-r from-brand-600 to-indigo-600 px-4 py-3 text-white shrink-0">
+            <p className="text-[10px] uppercase tracking-wider text-white/70 mb-0.5">Question</p>
+            <h2 className="font-display text-base font-bold leading-snug line-clamp-4">{r.questionText}</h2>
           </div>
-          <div className="p-5 space-y-2.5">
+          <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
             {(r.options || []).map((o, i) => (
               <div
                 key={i}
-                className={`flex items-center gap-3 rounded-2xl px-3.5 py-3 border-2 ${
+                className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 border-2 ${
                   o.isCorrect
                     ? 'border-emerald-500 bg-emerald-50'
-                    : 'border-slate-100 bg-slate-50 opacity-60'
+                    : 'border-slate-100 bg-slate-50 opacity-70'
                 }`}
               >
                 <span
@@ -392,25 +392,26 @@ export default function ParticipantPage() {
                 >
                   {o.isCorrect ? '✓' : String.fromCharCode(65 + i)}
                 </span>
-                <span className={`flex-1 text-sm font-medium ${o.isCorrect ? 'text-emerald-900' : 'text-slate-600'}`}>
+                <span className={`flex-1 text-sm font-medium break-words ${o.isCorrect ? 'text-emerald-900' : 'text-slate-600'}`}>
                   {o.text}
                 </span>
                 {o.isCorrect && (
-                  <span className="text-[10px] font-bold uppercase text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] font-bold uppercase text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
                     Correct
                   </span>
                 )}
               </div>
             ))}
-            <div className="pt-3 text-center border-t border-slate-100 mt-2">
-              <p className="text-xs text-slate-500">The correct answer is</p>
-              <p className="font-display text-xl font-bold text-emerald-600 mt-1">{r.correctText}</p>
-            </div>
+          </div>
+          <div className="shrink-0 border-t border-emerald-100 bg-emerald-50/80 px-4 py-3 text-center">
+            <p className="text-xs text-slate-500">The correct answer is</p>
+            <p className="font-display text-lg font-bold text-emerald-600 mt-0.5 break-words">{r.correctText}</p>
           </div>
         </div>
       </div>
     );
   }
+
 
   // Between questions
   if (status === 'between') {
